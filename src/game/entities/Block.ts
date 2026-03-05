@@ -1,4 +1,4 @@
-import type { Block, BlockType, FallingBlock } from "../types";
+import type { Block, BlockType, FallingMember } from "../types";
 
 export function createBlock(type: BlockType): Block {
   switch (type) {
@@ -18,7 +18,7 @@ export function createBlock(type: BlockType): Block {
   }
 }
 
-export function fromFallingBlock(source: FallingBlock): Block {
+export function fromFallingMember(source: FallingMember): Block {
   return {
     type: source.type,
     hp: source.hp,

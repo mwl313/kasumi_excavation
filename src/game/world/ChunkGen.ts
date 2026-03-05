@@ -1,4 +1,9 @@
-import { CHUNK_HEIGHT, WORLD_WIDTH } from "../constants";
+import {
+  CHUNK_HEIGHT,
+  NATURAL_EMPTY_CHANCE,
+  NATURAL_EMPTY_START_DEPTH,
+  WORLD_WIDTH
+} from "../constants";
 import { createBlock } from "../entities/Block";
 import type { Block } from "../types";
 
@@ -33,14 +38,15 @@ export class ChunkGenerator {
 
     const rng = mulberry32(hash32(this.seed, y, 0x9e3779b9));
     const row: Array<Block | null> = new Array<Block | null>(WORLD_WIDTH).fill(null);
-    const guaranteedEmptyX = Math.floor(rng() * WORLD_WIDTH);
 
     const sturdyChance = y < 12 ? 0.12 : 0.2;
     const unbreakableChance = y < 18 ? 0.03 : 0.08;
     const eventChance = 0.02;
+    const naturalEmptyChance = y < NATURAL_EMPTY_START_DEPTH ? 0 : NATURAL_EMPTY_CHANCE;
+    let unbreakableCount = 0;
 
     for (let x = 0; x < WORLD_WIDTH; x += 1) {
-      if (x === guaranteedEmptyX) {
+      if (rng() < naturalEmptyChance) {
         row[x] = null;
         continue;
       }
@@ -52,9 +58,15 @@ export class ChunkGenerator {
         row[x] = createBlock("STURDY");
       } else if (roll < 1 - eventChance) {
         row[x] = createBlock("UNBREAKABLE");
+        unbreakableCount += 1;
       } else {
         row[x] = createBlock("EVENT");
       }
+    }
+
+    if (unbreakableCount === WORLD_WIDTH) {
+      const replaceX = Math.floor(rng() * WORLD_WIDTH);
+      row[replaceX] = createBlock("BASIC");
     }
 
     return row;

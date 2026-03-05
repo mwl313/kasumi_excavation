@@ -10,7 +10,7 @@ import {
 import { Player } from "./entities/Player";
 import { Input } from "./input/Input";
 import { Renderer } from "./render/Renderer";
-import { updateFallingBlocks } from "./systems/FallingBlocks";
+import { updateFallingGroups } from "./systems/FallingBlocks";
 import type { Block, Direction } from "./types";
 import { World } from "./world/World";
 
@@ -55,6 +55,7 @@ export class Game {
     }
 
     if (this.gameOver) {
+      this.player.updateRenderPosition(dt);
       this.updateHud();
       return;
     }
@@ -70,14 +71,13 @@ export class Game {
       }
     }
 
-    this.applyPlayerGravity(dt);
     this.world.ensureGeneratedThrough(this.player.y + GENERATE_AHEAD_ROWS);
-    this.world.updateInstability(
+    this.world.updateInstabilityGroups(
       dt,
       this.player.y - ACTIVE_CHECK_UP_ROWS,
       this.player.y + ACTIVE_CHECK_DOWN_ROWS
     );
-    updateFallingBlocks(this.world, this.player, dt);
+    updateFallingGroups(this.world, this.player, dt);
     this.applyPlayerGravity(dt);
     this.world.pruneRowsAbove(this.player.y - PRUNE_ROWS_ABOVE);
 
@@ -91,6 +91,7 @@ export class Game {
       this.gameOver = true;
     }
 
+    this.player.updateRenderPosition(dt);
     this.updateHud();
   }
 
@@ -103,6 +104,7 @@ export class Game {
     this.world = new World(newSeed);
     this.player.reset(3, 0);
     this.player.fallTimer = PLAYER_FALL_INTERVAL;
+    this.player.snapRenderPosition();
     this.world.initializeSpawn(this.player.x, this.player.y);
     this.world.ensureGeneratedThrough(this.player.y + GENERATE_AHEAD_ROWS);
     this.depth = 0;
@@ -188,7 +190,7 @@ export class Game {
       if (block.hp > 0) {
         return;
       }
-      this.world.removeBlock(targetX, targetY);
+      this.world.excavateBlock(targetX, targetY);
       this.movePlayerTo(targetX, targetY);
       if (isUpward) {
         this.player.setAirborne();
@@ -198,11 +200,10 @@ export class Game {
 
     if (block.type === "EVENT") {
       const eventName = block.eventId ?? "placeholder_event";
-      // Placeholder callback behavior for MVP.
       console.log(`[EVENT] Triggered: ${eventName}`);
     }
 
-    this.world.removeBlock(targetX, targetY);
+    this.world.excavateBlock(targetX, targetY);
     this.movePlayerTo(targetX, targetY);
     if (isUpward) {
       this.player.setAirborne();
@@ -216,30 +217,77 @@ export class Game {
   }
 
   private syncGroundedState(): void {
-    if (this.world.isStaticCellEmpty(this.player.x, this.player.y + 1)) {
-      this.player.setAirborne();
+    const staticSupport = !this.world.isStaticCellEmpty(this.player.x, this.player.y + 1);
+    const fallingSupport = this.world.getSupportingFallingGroupUnderPlayer(
+      this.player.x,
+      this.player.y
+    );
+
+    if (staticSupport) {
+      this.player.ridingGroupId = null;
+      this.player.setGrounded();
       return;
     }
-    this.player.setGrounded();
+
+    if (fallingSupport) {
+      this.player.ridingGroupId = fallingSupport.groupId;
+      this.player.setGrounded();
+      return;
+    }
+
+    this.player.ridingGroupId = null;
+    this.player.setAirborne();
   }
 
   private applyPlayerGravity(dt: number): void {
-    if (this.player.isGrounded) {
-      if (this.world.isStaticCellEmpty(this.player.x, this.player.y + 1)) {
-        this.player.setAirborne();
+    if (this.player.ridingGroupId !== null) {
+      const support = this.world.getSupportingFallingGroupUnderPlayer(this.player.x, this.player.y);
+      if (support && support.groupId === this.player.ridingGroupId) {
+        this.player.setGrounded();
+        return;
       }
-      return;
+      this.player.ridingGroupId = null;
+    }
+
+    const staticSupport = !this.world.isStaticCellEmpty(this.player.x, this.player.y + 1);
+    const fallingSupport = this.world.getSupportingFallingGroupUnderPlayer(
+      this.player.x,
+      this.player.y
+    );
+
+    if (this.player.isGrounded) {
+      if (staticSupport) {
+        return;
+      }
+      if (fallingSupport) {
+        this.player.ridingGroupId = fallingSupport.groupId;
+        return;
+      }
+      this.player.setAirborne();
     }
 
     this.player.fallTimer -= dt;
     while (this.player.fallTimer <= 0) {
-      if (this.world.isStaticCellEmpty(this.player.x, this.player.y + 1)) {
-        this.player.y += 1;
-        this.player.fallTimer += PLAYER_FALL_INTERVAL;
-      } else {
+      const hasStaticSupport = !this.world.isStaticCellEmpty(this.player.x, this.player.y + 1);
+      const hasFallingSupport = this.world.getSupportingFallingGroupUnderPlayer(
+        this.player.x,
+        this.player.y
+      );
+
+      if (hasStaticSupport) {
+        this.player.ridingGroupId = null;
         this.player.setGrounded();
         break;
       }
+
+      if (hasFallingSupport) {
+        this.player.ridingGroupId = hasFallingSupport.groupId;
+        this.player.setGrounded();
+        break;
+      }
+
+      this.player.y += 1;
+      this.player.fallTimer += PLAYER_FALL_INTERVAL;
     }
   }
 

@@ -14,13 +14,22 @@ export interface Block {
   yFloat: number;
 }
 
-export interface FallingBlock {
+export interface FallingMember {
   x: number;
-  yFloat: number;
+  yOffset: number;
   type: BlockType;
   hp: number | null;
   eventId?: string;
+}
+
+export interface FallingGroup {
+  id: number;
+  state: "SHAKING" | "FALLING";
+  shakeTimer: number;
+  yBase: number;
+  yFloat: number;
   vy: number;
+  members: FallingMember[];
 }
 
 export interface StaticBlockSnapshot {

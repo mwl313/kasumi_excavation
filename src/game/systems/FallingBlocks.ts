@@ -1,67 +1,178 @@
 import { BLOCK_GRAVITY, BLOCK_MAX_VY } from "../constants";
+import { fromFallingMember } from "../entities/Block";
 import { Player } from "../entities/Player";
-import type { Direction, FallingBlock } from "../types";
+import type { Direction, FallingGroup } from "../types";
 import { World } from "../world/World";
 
-export function updateFallingBlocks(world: World, player: Player, dt: number): void {
-  const survivors: FallingBlock[] = [];
-
-  for (const block of world.fallingBlocks) {
-    block.vy = Math.min(BLOCK_MAX_VY, block.vy + BLOCK_GRAVITY * dt);
-
-    const currentY = block.yFloat;
-    const nextY = currentY + block.vy * dt;
-    const currentCellY = Math.floor(currentY);
-    let landed = false;
-    let resolvedY = nextY;
-
-    if (!world.isStaticCellEmpty(block.x, currentCellY + 1)) {
-      landed = true;
-      resolvedY = currentCellY;
-    } else {
-      const targetCellY = Math.floor(nextY);
-      if (targetCellY > currentCellY) {
-        for (let candidateY = currentCellY + 1; candidateY <= targetCellY; candidateY += 1) {
-          if (!world.isStaticCellEmpty(block.x, candidateY + 1)) {
-            landed = true;
-            resolvedY = candidateY;
-            break;
-          }
-        }
-      }
+export function updateFallingGroups(world: World, player: Player, dt: number): void {
+  if (player.ridingGroupId === null && player.isGrounded) {
+    const support = world.getSupportingFallingGroupUnderPlayer(player.x, player.y);
+    if (support) {
+      player.ridingGroupId = support.groupId;
     }
-
-    block.yFloat = resolvedY;
-
-    const fallCellY = Math.round(block.yFloat);
-    if (block.x === player.x && fallCellY === player.y) {
-      const gotHit = player.tryDamage(1);
-      if (gotHit) {
-        const pushDirection = resolvePushDirection(player.facing, player.x, player.y, world);
-        if (pushDirection !== 0) {
-          player.x += pushDirection;
-        }
-
-        if (world.isStaticCellEmpty(player.x, player.y + 1)) {
-          player.setAirborne();
-        } else {
-          player.setGrounded();
-        }
-      }
-    }
-
-    if (landed) {
-      const snappedY = Math.floor(block.yFloat);
-      if (!(player.x === block.x && player.y === snappedY)) {
-        world.landFallingBlock(block, snappedY);
-        continue;
-      }
-    }
-
-    survivors.push(block);
   }
 
-  world.replaceFallingBlocks(survivors);
+  const nextGroups: FallingGroup[] = [];
+
+  for (const group of world.fallingGroups) {
+    if (group.state !== "FALLING") {
+      nextGroups.push(group);
+      continue;
+    }
+
+    const oldBaseY = group.yFloat;
+    group.vy = Math.min(BLOCK_MAX_VY, group.vy + BLOCK_GRAVITY * dt);
+    const targetBaseY = oldBaseY + group.vy * dt;
+
+    const landing = resolveGroupMovement(world, group, oldBaseY, targetBaseY);
+    group.yFloat = landing.resolvedBaseY;
+
+    if (player.ridingGroupId === group.id) {
+      snapPlayerOnRidingGroup(player, group);
+      player.setGrounded();
+    }
+
+    applyFallingGroupDamage(world, player, group, oldBaseY);
+
+    if (landing.landed) {
+      landGroup(world, player, group);
+      if (player.ridingGroupId === group.id) {
+        player.ridingGroupId = null;
+      }
+      continue;
+    }
+
+    nextGroups.push(group);
+  }
+
+  world.replaceFallingGroups(nextGroups);
+
+  if (player.ridingGroupId !== null) {
+    const support = world.getSupportingFallingGroupUnderPlayer(player.x, player.y);
+    if (!support || support.groupId !== player.ridingGroupId) {
+      player.ridingGroupId = null;
+    }
+  }
+}
+
+function resolveGroupMovement(
+  world: World,
+  group: FallingGroup,
+  currentBaseY: number,
+  targetBaseY: number
+): { landed: boolean; resolvedBaseY: number } {
+  let landed = false;
+  let resolvedBaseY = targetBaseY;
+
+  for (const member of group.members) {
+    const currentMemberY = currentBaseY + member.yOffset;
+    const targetMemberY = targetBaseY + member.yOffset;
+    const currentCellY = Math.floor(currentMemberY);
+    const targetCellY = Math.floor(targetMemberY);
+
+    if (targetCellY <= currentCellY) {
+      continue;
+    }
+
+    for (let candidateY = currentCellY + 1; candidateY <= targetCellY; candidateY += 1) {
+      if (!world.isStaticCellEmpty(member.x, candidateY + 1)) {
+        landed = true;
+        const memberAllowedBase = candidateY - member.yOffset;
+        resolvedBaseY = Math.min(resolvedBaseY, memberAllowedBase);
+        break;
+      }
+    }
+  }
+
+  if (landed) {
+    return { landed: true, resolvedBaseY: Math.floor(resolvedBaseY) };
+  }
+
+  return { landed: false, resolvedBaseY };
+}
+
+function snapPlayerOnRidingGroup(player: Player, group: FallingGroup): void {
+  let topY: number | null = null;
+  for (const member of group.members) {
+    if (member.x !== player.x) {
+      continue;
+    }
+    const cellY = Math.round(group.yFloat + member.yOffset);
+    if (topY === null || cellY < topY) {
+      topY = cellY;
+    }
+  }
+
+  if (topY !== null) {
+    player.y = topY - 1;
+  }
+}
+
+function applyFallingGroupDamage(
+  world: World,
+  player: Player,
+  group: FallingGroup,
+  oldBaseY: number
+): void {
+  if (player.ridingGroupId === group.id) {
+    return;
+  }
+
+  for (const member of group.members) {
+    if (member.x !== player.x) {
+      continue;
+    }
+
+    const prevCellY = Math.round(oldBaseY + member.yOffset);
+    const currentCellY = Math.round(group.yFloat + member.yOffset);
+    const crossedPlayer =
+      currentCellY === player.y || (prevCellY < player.y && currentCellY >= player.y);
+
+    if (!crossedPlayer) {
+      continue;
+    }
+
+    const gotHit = player.tryDamage(1);
+    if (!gotHit) {
+      return;
+    }
+
+    const pushDirection = resolvePushDirection(player.facing, player.x, player.y, world);
+    if (pushDirection !== 0) {
+      player.x += pushDirection;
+    }
+
+    const support = world.getSupportingFallingGroupUnderPlayer(player.x, player.y);
+    if (support) {
+      player.ridingGroupId = support.groupId;
+      player.setGrounded();
+    } else if (world.isStaticCellEmpty(player.x, player.y + 1)) {
+      player.ridingGroupId = null;
+      player.setAirborne();
+    } else {
+      player.ridingGroupId = null;
+      player.setGrounded();
+    }
+
+    return;
+  }
+}
+
+function landGroup(world: World, player: Player, group: FallingGroup): void {
+  const baseY = Math.round(group.yFloat);
+
+  if (player.ridingGroupId === group.id) {
+    snapPlayerOnRidingGroup(player, group);
+    player.setGrounded();
+  }
+
+  for (const member of group.members) {
+    const y = baseY + member.yOffset;
+    if (player.x === member.x && player.y === y) {
+      continue;
+    }
+    world.setBlock(member.x, y, fromFallingMember(member));
+  }
 }
 
 function resolvePushDirection(

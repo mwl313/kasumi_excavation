@@ -1,6 +1,7 @@
 import {
   PLAYER_FALL_INTERVAL,
   PLAYER_IFRAME_DURATION,
+  PLAYER_MOVE_SPEED,
   PLAYER_MAX_HP
 } from "../constants";
 import type { Direction, PlayerState } from "../types";
@@ -13,6 +14,9 @@ export class Player {
   state: PlayerState;
   iFrameTimer: number;
   fallTimer: number;
+  ridingGroupId: number | null;
+  renderX: number;
+  renderY: number;
 
   constructor(x: number, y: number) {
     this.x = x;
@@ -22,6 +26,9 @@ export class Player {
     this.state = "Grounded";
     this.iFrameTimer = 0;
     this.fallTimer = PLAYER_FALL_INTERVAL;
+    this.ridingGroupId = null;
+    this.renderX = x;
+    this.renderY = y;
   }
 
   reset(x: number, y: number): void {
@@ -32,6 +39,9 @@ export class Player {
     this.state = "Grounded";
     this.iFrameTimer = 0;
     this.fallTimer = PLAYER_FALL_INTERVAL;
+    this.ridingGroupId = null;
+    this.renderX = x;
+    this.renderY = y;
   }
 
   setFacing(direction: Direction): void {
@@ -68,4 +78,22 @@ export class Player {
     this.iFrameTimer = PLAYER_IFRAME_DURATION;
     return true;
   }
+
+  updateRenderPosition(dt: number): void {
+    this.renderX = moveToward(this.renderX, this.x, PLAYER_MOVE_SPEED * dt);
+    this.renderY = moveToward(this.renderY, this.y, PLAYER_MOVE_SPEED * dt);
+  }
+
+  snapRenderPosition(): void {
+    this.renderX = this.x;
+    this.renderY = this.y;
+  }
+}
+
+function moveToward(current: number, target: number, maxDelta: number): number {
+  const delta = target - current;
+  if (Math.abs(delta) <= maxDelta) {
+    return target;
+  }
+  return current + Math.sign(delta) * maxDelta;
 }

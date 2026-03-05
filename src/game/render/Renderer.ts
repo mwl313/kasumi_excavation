@@ -40,20 +40,26 @@ export class Renderer {
       this.drawBlock(snapshot.block, snapshot.x, snapshot.y, cameraY, now, false);
     }
 
-    for (const falling of world.fallingBlocks) {
-      if (falling.yFloat < minY - 1 || falling.yFloat > maxY + 1) {
+    for (const group of world.fallingGroups) {
+      if (group.state !== "FALLING") {
         continue;
       }
-      const asBlock: Block = {
-        type: falling.type,
-        hp: falling.hp,
-        eventId: falling.eventId,
-        fallState: "FALLING",
-        shakeTimer: 0,
-        vy: falling.vy,
-        yFloat: falling.yFloat
-      };
-      this.drawBlock(asBlock, falling.x, falling.yFloat, cameraY, now, true);
+      for (const member of group.members) {
+        const memberY = group.yFloat + member.yOffset;
+        if (memberY < minY - 1 || memberY > maxY + 1) {
+          continue;
+        }
+        const asBlock: Block = {
+          type: member.type,
+          hp: member.hp,
+          eventId: member.eventId,
+          fallState: "FALLING",
+          shakeTimer: 0,
+          vy: group.vy,
+          yFloat: memberY
+        };
+        this.drawBlock(asBlock, member.x, memberY, cameraY, now, true);
+      }
     }
 
     this.drawPlayer(player, cameraY, now);
@@ -141,8 +147,8 @@ export class Renderer {
 
   private drawPlayer(player: Player, cameraY: number, nowMs: number): void {
     const ctx = this.ctx;
-    const cx = player.x * TILE_SIZE + TILE_SIZE * 0.5;
-    const cy = (player.y - cameraY) * TILE_SIZE + TILE_SIZE * 0.5;
+    const cx = player.renderX * TILE_SIZE + TILE_SIZE * 0.5;
+    const cy = (player.renderY - cameraY) * TILE_SIZE + TILE_SIZE * 0.5;
 
     const flicker =
       player.iFrameTimer > 0 ? (Math.floor(nowMs / 60) % 2 === 0 ? 0.35 : 0.75) : 1;
