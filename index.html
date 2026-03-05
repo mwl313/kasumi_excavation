@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kasumi Excavation</title>
+  </head>
+  <body>
+    <div id="app">
+      <div class="hud">
+        <div class="stats">
+          <span>HP: <strong id="hp-value">3</strong></span>
+          <span>Depth: <strong id="depth-value">0</strong></span>
+          <span>Best: <strong id="best-value">0</strong></span>
+        </div>
+        <button id="restart-btn" type="button" hidden>Restart (R)</button>
+      </div>
+      <canvas id="game-canvas" width="392" height="840"></canvas>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
