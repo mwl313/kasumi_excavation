@@ -1,23 +1,35 @@
 import {
   ACTIVE_CHECK_DOWN_ROWS,
   ACTIVE_CHECK_UP_ROWS,
+  ANCHOR_DURATION,
   BEST_DEPTH_STORAGE_KEY,
+  CAMERA_OFFSET_ROWS,
+  CAMERA_SMOOTH_SPEED,
+  CLUSTER_SCAN_DOWN,
+  CLUSTER_SCAN_UP,
   GENERATE_AHEAD_ROWS,
   PLAYER_ACTION_INTERVAL,
-  PLAYER_FALL_INTERVAL,
-  PRUNE_ROWS_ABOVE
+  PLAYER_GRAVITY,
+  PLAYER_IFRAME_DURATION,
+  PLAYER_MAX_VY,
+  PRUNE_ROWS_ABOVE,
+  RESONANCE_COST,
+  RESONANCE_MAX,
+  WORLD_WIDTH
 } from "./constants";
 import { Player } from "./entities/Player";
 import { Input } from "./input/Input";
 import { Renderer } from "./render/Renderer";
 import { updateFallingGroups } from "./systems/FallingBlocks";
-import type { Block, Direction } from "./types";
+import type { Block, BlockColor, Direction } from "./types";
 import { World } from "./world/World";
 
 interface HudElements {
   hpValue: HTMLElement;
   depthValue: HTMLElement;
   bestValue: HTMLElement;
+  colorValue: HTMLElement;
+  resValue: HTMLElement;
   restartButton: HTMLButtonElement;
 }
 
@@ -32,6 +44,18 @@ export class Game {
   private depth = 0;
   private bestDepth = 0;
   private gameOver = false;
+  private cameraY = 0;
+
+  private selectedColor: BlockColor = "RED";
+  private resonance: Record<BlockColor, number> = {
+    RED: 0,
+    BLUE: 0,
+    GREEN: 0,
+    YELLOW: 0
+  };
+  private anchorUntilMs = 0;
+  private anchorCenter: { x: number; y: number } | null = null;
+  private shieldCharges = 0;
 
   constructor(canvas: HTMLCanvasElement, hud: HudElements) {
     this.hud = hud;
@@ -42,6 +66,7 @@ export class Game {
     const seed = this.newSeed();
     this.world = new World(seed);
     this.player = new Player(3, 0);
+    this.cameraY = this.player.y - CAMERA_OFFSET_ROWS;
     this.world.initializeSpawn(this.player.x, this.player.y);
     this.world.ensureGeneratedThrough(this.player.y + GENERATE_AHEAD_ROWS);
     this.syncGroundedState();
@@ -56,13 +81,23 @@ export class Game {
 
     if (this.gameOver) {
       this.player.updateRenderPosition(dt);
+      this.updateCamera(dt);
       this.updateHud();
       return;
     }
 
     this.player.updateTimers(dt);
-    this.actionCooldown = Math.max(0, this.actionCooldown - dt);
 
+    const selected = this.input.consumeSelectColor();
+    if (selected) {
+      this.selectedColor = selected;
+    }
+
+    if (this.input.consumeCastAbility()) {
+      this.tryCastSelectedAbility();
+    }
+
+    this.actionCooldown = Math.max(0, this.actionCooldown - dt);
     if (this.actionCooldown <= 0) {
       const action = this.input.consumeDirection();
       if (action) {
@@ -71,13 +106,17 @@ export class Game {
       }
     }
 
+    this.syncAnchorField(performance.now());
+
     this.world.ensureGeneratedThrough(this.player.y + GENERATE_AHEAD_ROWS);
     this.world.updateInstabilityGroups(
       dt,
       this.player.y - ACTIVE_CHECK_UP_ROWS,
       this.player.y + ACTIVE_CHECK_DOWN_ROWS
     );
-    updateFallingGroups(this.world, this.player, dt);
+    updateFallingGroups(this.world, this.player, dt, {
+      consumeShieldHit: () => this.consumeShieldOnHit()
+    });
     this.applyPlayerGravity(dt);
     this.world.pruneRowsAbove(this.player.y - PRUNE_ROWS_ABOVE);
 
@@ -92,25 +131,34 @@ export class Game {
     }
 
     this.player.updateRenderPosition(dt);
+    this.updateCamera(dt);
     this.updateHud();
   }
 
   render(): void {
-    this.renderer.render(this.world, this.player, this.gameOver);
+    this.renderer.render(this.world, this.player, this.gameOver, this.cameraY);
   }
 
   restart(): void {
     const newSeed = this.newSeed();
     this.world = new World(newSeed);
     this.player.reset(3, 0);
-    this.player.fallTimer = PLAYER_FALL_INTERVAL;
     this.player.snapRenderPosition();
+    this.cameraY = this.player.y - CAMERA_OFFSET_ROWS;
     this.world.initializeSpawn(this.player.x, this.player.y);
     this.world.ensureGeneratedThrough(this.player.y + GENERATE_AHEAD_ROWS);
+
     this.depth = 0;
     this.gameOver = false;
     this.actionCooldown = 0;
+    this.selectedColor = "RED";
+    this.resonance = { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 };
+    this.anchorUntilMs = 0;
+    this.anchorCenter = null;
+    this.shieldCharges = 0;
+
     this.input.clear();
+    this.syncAnchorField(performance.now());
     this.syncGroundedState();
     this.updateHud();
   }
@@ -184,6 +232,8 @@ export class Game {
       return;
     }
 
+    const triggerColor = block.color;
+
     if (block.type === "STURDY") {
       const nextHp = (block.hp ?? 2) - 1;
       block.hp = Math.max(0, nextHp);
@@ -195,6 +245,7 @@ export class Game {
       if (isUpward) {
         this.player.setAirborne();
       }
+      this.applyClusterResonance(targetX, targetY, triggerColor);
       return;
     }
 
@@ -208,6 +259,124 @@ export class Game {
     if (isUpward) {
       this.player.setAirborne();
     }
+    this.applyClusterResonance(targetX, targetY, triggerColor);
+  }
+
+  private applyClusterResonance(x: number, y: number, color: BlockColor | undefined): void {
+    if (!color) {
+      return;
+    }
+
+    const result = this.world.tryClusterClearFrom(x, y, color, {
+      source: "MINING",
+      minY: this.player.y - CLUSTER_SCAN_UP,
+      maxY: this.player.y + CLUSTER_SCAN_DOWN
+    });
+
+    if (result.totalAffected <= 0) {
+      return;
+    }
+
+    this.resonance[color] = Math.min(RESONANCE_MAX, this.resonance[color] + result.totalAffected);
+  }
+
+  private tryCastSelectedAbility(): void {
+    if (this.resonance[this.selectedColor] < RESONANCE_COST) {
+      return;
+    }
+
+    this.resonance[this.selectedColor] -= RESONANCE_COST;
+
+    switch (this.selectedColor) {
+      case "RED":
+        this.castRedOverheatBurst();
+        break;
+      case "BLUE":
+        this.castBlueAnchorField();
+        break;
+      case "GREEN":
+        this.castGreenShield();
+        break;
+      case "YELLOW":
+        this.castYellowHorizontalBore();
+        break;
+      default:
+        break;
+    }
+  }
+
+  private castRedOverheatBurst(): void {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        this.applyAbilityImpactAt(this.player.x + dx, this.player.y + dy);
+      }
+    }
+  }
+
+  private castBlueAnchorField(): void {
+    this.anchorCenter = { x: this.player.x, y: this.player.y };
+    this.anchorUntilMs = performance.now() + ANCHOR_DURATION * 1000;
+  }
+
+  private castGreenShield(): void {
+    this.shieldCharges = 1;
+  }
+
+  private castYellowHorizontalBore(): void {
+    for (let x = 0; x < WORLD_WIDTH; x += 1) {
+      this.applyAbilityImpactAt(x, this.player.y);
+    }
+  }
+
+  private applyAbilityImpactAt(x: number, y: number): void {
+    if (!this.world.isInsideX(x)) {
+      return;
+    }
+
+    const block = this.world.getBlock(x, y);
+    if (!block) {
+      return;
+    }
+
+    if (block.type === "UNBREAKABLE") {
+      return;
+    }
+
+    if (block.type === "STURDY") {
+      const nextHp = (block.hp ?? 2) - 1;
+      block.hp = Math.max(0, nextHp);
+      if (block.hp <= 0) {
+        this.world.excavateBlock(x, y);
+      }
+      return;
+    }
+
+    this.world.excavateBlock(x, y);
+  }
+
+  private syncAnchorField(nowMs: number): void {
+    if (!this.anchorCenter || nowMs >= this.anchorUntilMs) {
+      this.anchorCenter = null;
+      this.world.setAnchorField(null);
+      return;
+    }
+
+    this.world.setAnchorField({
+      minX: this.anchorCenter.x - 1,
+      maxX: this.anchorCenter.x + 1,
+      minY: this.anchorCenter.y + 1,
+      maxY: this.anchorCenter.y + 4
+    });
+  }
+
+  private consumeShieldOnHit(): boolean {
+    if (this.shieldCharges <= 0) {
+      return false;
+    }
+
+    this.shieldCharges -= 1;
+    this.player.iFrameTimer = Math.max(this.player.iFrameTimer, PLAYER_IFRAME_DURATION * 0.5);
+    return true;
   }
 
   private movePlayerTo(x: number, y: number): void {
@@ -266,8 +435,8 @@ export class Game {
       this.player.setAirborne();
     }
 
-    this.player.fallTimer -= dt;
-    while (this.player.fallTimer <= 0) {
+    this.player.accumulateFall(dt, PLAYER_GRAVITY, PLAYER_MAX_VY);
+    while (this.player.fallDistanceBuffer >= 1) {
       const hasStaticSupport = !this.world.isStaticCellEmpty(this.player.x, this.player.y + 1);
       const hasFallingSupport = this.world.getSupportingFallingGroupUnderPlayer(
         this.player.x,
@@ -287,7 +456,7 @@ export class Game {
       }
 
       this.player.y += 1;
-      this.player.fallTimer += PLAYER_FALL_INTERVAL;
+      this.player.fallDistanceBuffer -= 1;
     }
   }
 
@@ -295,7 +464,21 @@ export class Game {
     this.hud.hpValue.textContent = String(this.player.hp);
     this.hud.depthValue.textContent = String(this.depth);
     this.hud.bestValue.textContent = String(this.bestDepth);
+    this.hud.colorValue.textContent = this.selectedColor;
+
+    const resText = `R:${this.resonance.RED} B:${this.resonance.BLUE} G:${this.resonance.GREEN} Y:${this.resonance.YELLOW}`;
+    const shieldText = this.shieldCharges > 0 ? " | Shield:ON" : "";
+    const anchorActive = this.anchorCenter && performance.now() < this.anchorUntilMs;
+    const anchorText = anchorActive ? " | Anchor:ON" : "";
+    this.hud.resValue.textContent = `${resText}${shieldText}${anchorText}`;
+
     this.hud.restartButton.hidden = !this.gameOver;
+  }
+
+  private updateCamera(dt: number): void {
+    const target = this.player.renderY - CAMERA_OFFSET_ROWS;
+    const step = CAMERA_SMOOTH_SPEED * dt;
+    this.cameraY = moveToward(this.cameraY, target, step);
   }
 
   private loadBestDepth(): number {
@@ -329,4 +512,12 @@ function deltaForDirection(direction: Direction): [number, number] {
     default:
       return [0, 0];
   }
+}
+
+function moveToward(current: number, target: number, maxDelta: number): number {
+  const delta = target - current;
+  if (Math.abs(delta) <= maxDelta) {
+    return target;
+  }
+  return current + Math.sign(delta) * maxDelta;
 }

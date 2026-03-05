@@ -4,7 +4,16 @@ import { Player } from "../entities/Player";
 import type { Direction, FallingGroup } from "../types";
 import { World } from "../world/World";
 
-export function updateFallingGroups(world: World, player: Player, dt: number): void {
+interface FallingGroupUpdateOptions {
+  consumeShieldHit: () => boolean;
+}
+
+export function updateFallingGroups(
+  world: World,
+  player: Player,
+  dt: number,
+  options: FallingGroupUpdateOptions
+): void {
   if (player.ridingGroupId === null && player.isGrounded) {
     const support = world.getSupportingFallingGroupUnderPlayer(player.x, player.y);
     if (support) {
@@ -32,7 +41,7 @@ export function updateFallingGroups(world: World, player: Player, dt: number): v
       player.setGrounded();
     }
 
-    applyFallingGroupDamage(world, player, group, oldBaseY);
+    applyFallingGroupDamage(world, player, group, oldBaseY, options);
 
     if (landing.landed) {
       landGroup(world, player, group);
@@ -112,7 +121,8 @@ function applyFallingGroupDamage(
   world: World,
   player: Player,
   group: FallingGroup,
-  oldBaseY: number
+  oldBaseY: number,
+  options: FallingGroupUpdateOptions
 ): void {
   if (player.ridingGroupId === group.id) {
     return;
@@ -130,6 +140,11 @@ function applyFallingGroupDamage(
 
     if (!crossedPlayer) {
       continue;
+    }
+
+    const shieldBlocked = options.consumeShieldHit();
+    if (shieldBlocked) {
+      return;
     }
 
     const gotHit = player.tryDamage(1);

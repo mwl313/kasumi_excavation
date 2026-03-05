@@ -1,12 +1,11 @@
 import {
-  CAMERA_OFFSET_ROWS,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   TILE_SIZE,
   WORLD_WIDTH
 } from "../constants";
 import { Player } from "../entities/Player";
-import type { Block, BlockType, Direction } from "../types";
+import type { Block, BlockColor, Direction } from "../types";
 import { World } from "../world/World";
 
 export class Renderer {
@@ -25,8 +24,7 @@ export class Renderer {
     this.ctx = ctx;
   }
 
-  render(world: World, player: Player, gameOver: boolean): void {
-    const cameraY = player.y - CAMERA_OFFSET_ROWS;
+  render(world: World, player: Player, gameOver: boolean, cameraY: number): void {
     const visibleRows = Math.ceil(this.canvas.height / TILE_SIZE) + 3;
     const minY = Math.floor(cameraY) - 1;
     const maxY = minY + visibleRows;
@@ -52,6 +50,7 @@ export class Renderer {
         const asBlock: Block = {
           type: member.type,
           hp: member.hp,
+          color: member.color,
           eventId: member.eventId,
           fallState: "FALLING",
           shakeTimer: 0,
@@ -116,7 +115,7 @@ export class Renderer {
       block.fallState === "SHAKING" ? Math.sin(nowMs * 0.08 + x * 5 + y * 3) * 2 : 0;
     const drawX = Math.round(baseX + jitter);
     const drawY = baseY;
-    const color = this.blockColor(block.type, isFalling);
+    const color = this.blockColor(block, isFalling);
 
     ctx.fillStyle = color;
     ctx.fillRect(drawX + 1, drawY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
@@ -193,8 +192,15 @@ export class Renderer {
     }
   }
 
-  private blockColor(type: BlockType, isFalling: boolean): string {
-    switch (type) {
+  private blockColor(block: Block, isFalling: boolean): string {
+    if ((block.type === "BASIC" || block.type === "STURDY") && block.color) {
+      const base = this.baseColorFor(block.color);
+      const factor =
+        block.type === "STURDY" ? (isFalling ? 0.6 : 0.72) : isFalling ? 0.84 : 1;
+      return this.adjustHexBrightness(base, factor);
+    }
+
+    switch (block.type) {
       case "BASIC":
         return isFalling ? "#9aa6b3" : "#7e8b98";
       case "STURDY":
@@ -206,5 +212,35 @@ export class Renderer {
       default:
         return "#7e8b98";
     }
+  }
+
+  private baseColorFor(color: BlockColor): string {
+    switch (color) {
+      case "RED":
+        return "#c85b5b";
+      case "BLUE":
+        return "#4f84c6";
+      case "GREEN":
+        return "#56b07f";
+      case "YELLOW":
+        return "#d3b85a";
+      default:
+        return "#7e8b98";
+    }
+  }
+
+  private adjustHexBrightness(hex: string, factor: number): string {
+    const clean = hex.replace("#", "");
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+
+    const nr = Math.max(0, Math.min(255, Math.round(r * factor)));
+    const ng = Math.max(0, Math.min(255, Math.round(g * factor)));
+    const nb = Math.max(0, Math.min(255, Math.round(b * factor)));
+
+    return `#${nr.toString(16).padStart(2, "0")}${ng
+      .toString(16)
+      .padStart(2, "0")}${nb.toString(16).padStart(2, "0")}`;
   }
 }

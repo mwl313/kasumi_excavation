@@ -39,6 +39,7 @@ body {
 
 .stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   font-size: 14px;
 }

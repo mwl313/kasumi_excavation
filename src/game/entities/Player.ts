@@ -1,5 +1,4 @@
 import {
-  PLAYER_FALL_INTERVAL,
   PLAYER_IFRAME_DURATION,
   PLAYER_MOVE_SPEED,
   PLAYER_MAX_HP
@@ -13,7 +12,8 @@ export class Player {
   facing: Direction;
   state: PlayerState;
   iFrameTimer: number;
-  fallTimer: number;
+  fallVy: number;
+  fallDistanceBuffer: number;
   ridingGroupId: number | null;
   renderX: number;
   renderY: number;
@@ -25,7 +25,8 @@ export class Player {
     this.facing = "RIGHT";
     this.state = "Grounded";
     this.iFrameTimer = 0;
-    this.fallTimer = PLAYER_FALL_INTERVAL;
+    this.fallVy = 0;
+    this.fallDistanceBuffer = 0;
     this.ridingGroupId = null;
     this.renderX = x;
     this.renderY = y;
@@ -38,7 +39,8 @@ export class Player {
     this.facing = "RIGHT";
     this.state = "Grounded";
     this.iFrameTimer = 0;
-    this.fallTimer = PLAYER_FALL_INTERVAL;
+    this.fallVy = 0;
+    this.fallDistanceBuffer = 0;
     this.ridingGroupId = null;
     this.renderX = x;
     this.renderY = y;
@@ -50,14 +52,16 @@ export class Player {
 
   setGrounded(): void {
     this.state = "Grounded";
-    this.fallTimer = PLAYER_FALL_INTERVAL;
+    this.fallVy = 0;
+    this.fallDistanceBuffer = 0;
   }
 
   setAirborne(): void {
-    this.state = "Airborne";
-    if (this.fallTimer <= 0) {
-      this.fallTimer = PLAYER_FALL_INTERVAL;
+    if (this.state === "Grounded") {
+      this.fallVy = 0;
+      this.fallDistanceBuffer = 0;
     }
+    this.state = "Airborne";
   }
 
   get isGrounded(): boolean {
@@ -77,6 +81,11 @@ export class Player {
     this.hp = Math.max(0, this.hp - amount);
     this.iFrameTimer = PLAYER_IFRAME_DURATION;
     return true;
+  }
+
+  accumulateFall(dt: number, gravity: number, maxVy: number): void {
+    this.fallVy = Math.min(maxVy, this.fallVy + gravity * dt);
+    this.fallDistanceBuffer += this.fallVy * dt;
   }
 
   updateRenderPosition(dt: number): void {

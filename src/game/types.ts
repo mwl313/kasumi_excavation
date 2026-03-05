@@ -2,11 +2,13 @@ export type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 export type PlayerState = "Grounded" | "Airborne";
 
 export type BlockType = "BASIC" | "STURDY" | "UNBREAKABLE" | "EVENT";
+export type BlockColor = "RED" | "BLUE" | "GREEN" | "YELLOW";
 export type FallState = "STATIC" | "SHAKING" | "FALLING";
 
 export interface Block {
   type: BlockType;
   hp: number | null;
+  color?: BlockColor;
   eventId?: string;
   fallState: FallState;
   shakeTimer: number;
@@ -19,6 +21,7 @@ export interface FallingMember {
   yOffset: number;
   type: BlockType;
   hp: number | null;
+  color?: BlockColor;
   eventId?: string;
 }
 
