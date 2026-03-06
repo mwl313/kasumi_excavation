@@ -4,9 +4,13 @@ import {
   GEN_COMBO_MAX_RATIO,
   GEN_COMBO_MIN_RATIO,
   GEN_DENSITY_HARD_BLOCK,
-  GEN_DENSITY_WINDOW,
   GEN_DENSITY_PENALTY,
   GEN_DENSITY_PENALTY_START,
+  GEN_DENSITY_WINDOW,
+  GEN_FUEL_BLOCK_CHANCE,
+  GEN_FUEL_MIN_PER_ROWS,
+  GEN_FUEL_NEAR_SIDE_BONUS,
+  GEN_FUEL_SIDE_BONUS,
   GEN_MAX_COMPONENT,
   GEN_MAX_COMPONENT_RECOLOR_LIMIT,
   GEN_NEIGHBOR_BONUS_LEFT,
@@ -55,6 +59,11 @@ export class ChunkGenerator {
           continue;
         }
 
+        if (rng() < this.fuelChanceForColumn(x)) {
+          grid[localY][x] = createBlock("FUEL");
+          continue;
+        }
+
         const roll = rng();
         if (roll < 1 - sturdyChance - unbreakableChance - eventChance) {
           const color = this.pickColor(x, localY, grid, rng);
@@ -77,6 +86,7 @@ export class ChunkGenerator {
       }
     }
 
+    this.enforceFuelGuarantee(grid, startY, rng);
     this.enforceHardCapMaxComponent(grid, rng);
     this.adjustComboDensity(grid, rng);
 
@@ -88,6 +98,78 @@ export class ChunkGenerator {
       });
     }
     return rows;
+  }
+
+  private fuelChanceForColumn(x: number): number {
+    if (x === 0 || x === WORLD_WIDTH - 1) {
+      return GEN_FUEL_BLOCK_CHANCE * GEN_FUEL_SIDE_BONUS;
+    }
+    if (x === 1 || x === WORLD_WIDTH - 2) {
+      return GEN_FUEL_BLOCK_CHANCE * GEN_FUEL_NEAR_SIDE_BONUS;
+    }
+    return GEN_FUEL_BLOCK_CHANCE;
+  }
+
+  private enforceFuelGuarantee(
+    grid: Array<Array<Block | null>>,
+    startY: number,
+    rng: () => number
+  ): void {
+    for (let start = 0; start < CHUNK_HEIGHT; start += GEN_FUEL_MIN_PER_ROWS) {
+      const end = Math.min(CHUNK_HEIGHT - 1, start + GEN_FUEL_MIN_PER_ROWS - 1);
+      if (this.hasFuelInWindow(grid, start, end, startY)) {
+        continue;
+      }
+      this.placeFuelInWindow(grid, start, end, startY, rng);
+    }
+  }
+
+  private hasFuelInWindow(
+    grid: Array<Array<Block | null>>,
+    start: number,
+    end: number,
+    startY: number
+  ): boolean {
+    for (let y = start; y <= end; y += 1) {
+      if (startY + y <= 0) {
+        continue;
+      }
+      for (let x = 0; x < WORLD_WIDTH; x += 1) {
+        if (grid[y][x]?.type === "FUEL") {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private placeFuelInWindow(
+    grid: Array<Array<Block | null>>,
+    start: number,
+    end: number,
+    startY: number,
+    rng: () => number
+  ): void {
+    const rows = shuffle(Array.from({ length: end - start + 1 }, (_, idx) => start + idx), rng)
+      .filter((localY) => startY + localY > 0);
+
+    const preferredColumns = shuffle([0, 1, WORLD_WIDTH - 2, WORLD_WIDTH - 1], rng);
+    const fallbackColumns = shuffle(
+      Array.from({ length: WORLD_WIDTH }, (_, x) => x).filter((x) => !preferredColumns.includes(x)),
+      rng
+    );
+    const orderedColumns = [...preferredColumns, ...fallbackColumns];
+
+    for (const y of rows) {
+      for (const x of orderedColumns) {
+        const block = grid[y][x];
+        if (block?.type === "UNBREAKABLE") {
+          continue;
+        }
+        grid[y][x] = createBlock("FUEL");
+        return;
+      }
+    }
   }
 
   private pickColor(
@@ -463,6 +545,17 @@ function weightedPick<T>(items: T[], weightOf: (item: T) => number, rng: () => n
     }
   }
   return items[items.length - 1] ?? items[0];
+}
+
+function shuffle<T>(source: T[], rng: () => number): T[] {
+  const arr = [...source];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    const temp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = temp;
+  }
+  return arr;
 }
 
 function hash32(seed: number, y: number, salt: number): number {

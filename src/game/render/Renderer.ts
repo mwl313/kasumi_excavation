@@ -144,6 +144,13 @@ export class Renderer {
       ctx.fill();
     }
 
+    if (block.type === "FUEL") {
+      ctx.fillStyle = "#2b1c06";
+      ctx.font = "bold 14px Segoe UI";
+      ctx.textAlign = "center";
+      ctx.fillText("F", drawX + TILE_SIZE * 0.5, drawY + TILE_SIZE * 0.64);
+    }
+
     if (block.type === "UNBREAKABLE" && block.cracked) {
       ctx.strokeStyle = "#9fa9b4";
       ctx.lineWidth = 2;
@@ -222,6 +229,8 @@ export class Renderer {
         return isFalling ? "#3f4953" : "#222b34";
       case "EVENT":
         return isFalling ? "#e1b750" : "#c9982f";
+      case "FUEL":
+        return isFalling ? "#f4a94c" : "#f6bf60";
       default:
         return "#7e8b98";
     }

@@ -1,7 +1,7 @@
 export type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 export type PlayerState = "Grounded" | "Airborne";
 
-export type BlockType = "BASIC" | "STURDY" | "UNBREAKABLE" | "EVENT";
+export type BlockType = "BASIC" | "STURDY" | "UNBREAKABLE" | "EVENT" | "FUEL";
 export type BlockColor = "RED" | "BLUE" | "GREEN" | "YELLOW";
 export type FallState = "STATIC" | "SHAKING" | "FALLING";
 

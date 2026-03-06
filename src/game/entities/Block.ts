@@ -7,6 +7,8 @@ export function createBlock(type: BlockType, color?: BlockColor): Block {
       return makeStaticBlock(type, 1, color ?? pickRandomBlockColor());
     case "STURDY":
       return makeStaticBlock(type, 2, color ?? pickRandomBlockColor());
+    case "FUEL":
+      return makeStaticBlock(type, 1);
     case "UNBREAKABLE":
       return {
         ...makeStaticBlock(type, null),

@@ -7,14 +7,12 @@ import {
   CHAIN_WINDOW_TURNS,
   CLUSTER_SCAN_DOWN,
   CLUSTER_SCAN_UP,
+  FUEL_BLOCK_AMOUNT,
   FUEL_COST_INVALID,
   FUEL_COST_JUMP,
   FUEL_COST_MINE_ATTEMPT,
   FUEL_COST_MOVE_EMPTY,
   FUEL_MAX,
-  FUEL_REBATE_BASE,
-  FUEL_REBATE_CHAIN_CAP,
-  FUEL_REBATE_SCALE,
   GENERATE_AHEAD_ROWS,
   OD_DURATION,
   OD_GAIN_BASE,
@@ -71,6 +69,7 @@ export class Game {
   private comboGauge = 0;
   private overdriveActive = false;
   private overdriveTimeLeft = 0;
+  private fuelBeforeOverdrive = 0;
   private turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
   private chainLevel = 0;
 
@@ -164,6 +163,7 @@ export class Game {
     this.comboGauge = 0;
     this.overdriveActive = false;
     this.overdriveTimeLeft = 0;
+    this.fuelBeforeOverdrive = 0;
     this.turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
     this.chainLevel = 0;
 
@@ -236,6 +236,12 @@ export class Game {
   }
 
   private mineTargetBlock(block: Block, targetX: number, targetY: number, isUpward: boolean): number {
+    if (block.type === "FUEL") {
+      this.breakAndMove(targetX, targetY, isUpward);
+      this.awardFuelFromBlock();
+      return 0;
+    }
+
     const triggerColor = block.color;
 
     if (this.overdriveActive) {
@@ -336,6 +342,16 @@ export class Game {
     }
   }
 
+  private awardFuelFromBlock(): void {
+    if (this.overdriveActive) {
+      return;
+    }
+    this.fuel = Math.min(FUEL_MAX, this.fuel + FUEL_BLOCK_AMOUNT);
+    if (this.fuel >= 1) {
+      this.limpMode = false;
+    }
+  }
+
   private tryClusterFromAction(x: number, y: number, color: NonNullable<Block["color"]>): number {
     const result = this.world.tryClusterClearFrom(x, y, color, {
       source: "MINING",
@@ -380,15 +396,6 @@ export class Game {
     }
     this.turnsSinceCombo = 0;
 
-    const rebate =
-      FUEL_REBATE_BASE +
-      affected * FUEL_REBATE_SCALE +
-      Math.min(FUEL_REBATE_CHAIN_CAP, this.chainLevel);
-    this.fuel = Math.min(FUEL_MAX, this.fuel + rebate);
-    if (this.fuel >= 1) {
-      this.limpMode = false;
-    }
-
     if (this.overdriveActive) {
       return;
     }
@@ -405,10 +412,10 @@ export class Game {
   }
 
   private startOverdrive(): void {
+    this.fuelBeforeOverdrive = this.fuel;
     this.overdriveActive = true;
     this.overdriveTimeLeft = OD_DURATION;
     this.comboGauge = OD_MAX;
-    this.fuel = FUEL_MAX;
     this.limpMode = false;
   }
 
@@ -425,6 +432,8 @@ export class Game {
       this.overdriveActive = false;
       this.overdriveTimeLeft = 0;
       this.comboGauge = 0;
+      this.fuel = Math.max(0, Math.min(FUEL_MAX, this.fuelBeforeOverdrive));
+      this.limpMode = this.fuel <= 0;
     }
   }
 
@@ -514,8 +523,13 @@ export class Game {
     this.hud.depthValue.textContent = String(this.depth);
     this.hud.bestValue.textContent = String(this.bestDepth);
 
-    this.hud.fuelValue.textContent = `${Math.floor(this.fuel)}/${FUEL_MAX}`;
-    this.hud.fuelFill.style.width = `${(this.fuel / FUEL_MAX) * 100}%`;
+    if (this.overdriveActive) {
+      this.hud.fuelValue.textContent = "∞";
+      this.hud.fuelFill.style.width = "100%";
+    } else {
+      this.hud.fuelValue.textContent = `${Math.floor(this.fuel)}/${FUEL_MAX}`;
+      this.hud.fuelFill.style.width = `${(this.fuel / FUEL_MAX) * 100}%`;
+    }
 
     this.hud.comboValue.textContent = `${Math.floor(this.comboGauge)}/${OD_MAX}`;
     this.hud.comboFill.style.width = `${(this.comboGauge / OD_MAX) * 100}%`;
