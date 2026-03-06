@@ -7,35 +7,43 @@
   </head>
   <body>
     <div id="app">
-      <div class="hud">
-        <div class="stats">
-          <span>HP: <strong id="hp-value">3</strong></span>
-          <span>Depth: <strong id="depth-value">0</strong></span>
-          <span>Best: <strong id="best-value">0</strong></span>
-        </div>
-        <button id="restart-btn" type="button" hidden>Restart (R)</button>
-      </div>
-      <div class="resources">
-        <div class="meter-row">
-          <span class="meter-label">Fuel</span>
-          <div class="meter-track">
-            <div id="fuel-fill" class="meter-fill fuel"></div>
+      <div class="game-layout">
+        <canvas id="game-canvas" width="392" height="840"></canvas>
+
+        <aside class="side-panel">
+          <div class="panel-top">
+            <div class="info-box">
+              <div>Depth: <strong id="depth-value">0</strong></div>
+              <div>Best: <strong id="best-value">0</strong></div>
+              <div>Chain: <strong id="chain-value">0</strong></div>
+            </div>
+
+            <div class="hearts" id="hp-hearts" aria-label="HP">
+              <span class="heart filled" data-i="1">♥</span>
+              <span class="heart filled" data-i="2">♥</span>
+              <span class="heart filled" data-i="3">♥</span>
+            </div>
           </div>
-          <strong id="fuel-value">100/100</strong>
-        </div>
-        <div class="meter-row">
-          <span class="meter-label">ComboGauge</span>
-          <div class="meter-track">
-            <div id="combo-fill" class="meter-fill combo"></div>
+
+          <div class="panel-meters">
+            <div class="meter">
+              <div class="meter-label">Fuel</div>
+              <div class="meter-track fuel-track">
+                <div class="meter-fill fuel" id="fuel-fill"></div>
+              </div>
+            </div>
+
+            <div class="meter">
+              <div class="meter-label">Combo</div>
+              <div class="meter-track combo-track">
+                <div class="meter-fill combo" id="combo-fill"></div>
+              </div>
+            </div>
           </div>
-          <strong id="combo-value">0/140</strong>
-        </div>
-        <div class="status-row">
-          <span>Chain: <strong id="chain-value">-</strong></span>
-          <span>Mode: <strong id="mode-value">NORMAL</strong></span>
-        </div>
+
+          <button id="restart-btn" type="button" hidden>Restart (R)</button>
+        </aside>
       </div>
-      <canvas id="game-canvas" width="392" height="840"></canvas>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

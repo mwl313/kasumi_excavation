@@ -1,4 +1,4 @@
-import { BLOCK_GRAVITY, BLOCK_MAX_VY } from "../constants";
+import { BLOCK_GRAVITY, BLOCK_MAX_VY, FUEL_BLOCK_AMOUNT } from "../constants";
 import { fromFallingMember } from "../entities/Block";
 import { Player } from "../entities/Player";
 import type { Direction, FallingGroup } from "../types";
@@ -6,6 +6,8 @@ import { World } from "../world/World";
 
 interface FallingGroupUpdateOptions {
   consumeShieldHit: () => boolean;
+  onCollectFuel: (amount: number) => void;
+  onCollectPowerup: () => void;
 }
 
 export function updateFallingGroups(
@@ -42,6 +44,13 @@ export function updateFallingGroups(
     }
 
     applyFallingGroupDamage(world, player, group, oldBaseY, options);
+
+    if (group.members.length === 0) {
+      if (player.ridingGroupId === group.id) {
+        player.ridingGroupId = null;
+      }
+      continue;
+    }
 
     if (landing.landed) {
       landGroup(world, player, group);
@@ -128,7 +137,8 @@ function applyFallingGroupDamage(
     return;
   }
 
-  for (const member of group.members) {
+  for (let idx = group.members.length - 1; idx >= 0; idx -= 1) {
+    const member = group.members[idx];
     if (member.x !== player.x) {
       continue;
     }
@@ -139,6 +149,18 @@ function applyFallingGroupDamage(
       currentCellY === player.y || (prevCellY < player.y && currentCellY >= player.y);
 
     if (!crossedPlayer) {
+      continue;
+    }
+
+    if (member.type === "FUEL") {
+      options.onCollectFuel(FUEL_BLOCK_AMOUNT);
+      group.members.splice(idx, 1);
+      continue;
+    }
+
+    if (member.type === "POWERUP") {
+      options.onCollectPowerup();
+      group.members.splice(idx, 1);
       continue;
     }
 

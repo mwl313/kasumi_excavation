@@ -39,15 +39,12 @@ interface ActionOutcome {
 }
 
 interface HudElements {
-  hpValue: HTMLElement;
+  hpHearts: HTMLElement;
   depthValue: HTMLElement;
   bestValue: HTMLElement;
-  fuelValue: HTMLElement;
   fuelFill: HTMLElement;
-  comboValue: HTMLElement;
   comboFill: HTMLElement;
   chainValue: HTMLElement;
-  modeValue: HTMLElement;
   restartButton: HTMLButtonElement;
 }
 
@@ -72,6 +69,7 @@ export class Game {
   private fuelBeforeOverdrive = 0;
   private turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
   private chainLevel = 0;
+  private powerupCount = 0;
 
   constructor(canvas: HTMLCanvasElement, hud: HudElements) {
     this.hud = hud;
@@ -122,7 +120,9 @@ export class Game {
       this.player.y + ACTIVE_CHECK_DOWN_ROWS
     );
     updateFallingGroups(this.world, this.player, dt, {
-      consumeShieldHit: () => false
+      consumeShieldHit: () => false,
+      onCollectFuel: (amount) => this.collectFuel(amount),
+      onCollectPowerup: () => this.collectPowerup()
     });
     this.applyPlayerGravity(dt);
     this.world.pruneRowsAbove(this.player.y - PRUNE_ROWS_ABOVE);
@@ -166,6 +166,7 @@ export class Game {
     this.fuelBeforeOverdrive = 0;
     this.turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
     this.chainLevel = 0;
+    this.powerupCount = 0;
 
     this.input.clear();
     this.syncGroundedState();
@@ -343,13 +344,22 @@ export class Game {
   }
 
   private awardFuelFromBlock(): void {
+    this.collectFuel(FUEL_BLOCK_AMOUNT);
+  }
+
+  private collectFuel(amount: number): void {
     if (this.overdriveActive) {
       return;
     }
-    this.fuel = Math.min(FUEL_MAX, this.fuel + FUEL_BLOCK_AMOUNT);
+    this.fuel = Math.min(FUEL_MAX, this.fuel + amount);
     if (this.fuel >= 1) {
       this.limpMode = false;
     }
+  }
+
+  private collectPowerup(): void {
+    this.powerupCount += 1;
+    console.log(`[POWERUP] collected (${this.powerupCount})`);
   }
 
   private tryClusterFromAction(x: number, y: number, color: NonNullable<Block["color"]>): number {
@@ -519,31 +529,23 @@ export class Game {
   }
 
   private updateHud(): void {
-    this.hud.hpValue.textContent = String(this.player.hp);
     this.hud.depthValue.textContent = String(this.depth);
     this.hud.bestValue.textContent = String(this.bestDepth);
+    this.hud.chainValue.textContent = String(this.chainLevel);
 
-    if (this.overdriveActive) {
-      this.hud.fuelValue.textContent = "∞";
-      this.hud.fuelFill.style.width = "100%";
-    } else {
-      this.hud.fuelValue.textContent = `${Math.floor(this.fuel)}/${FUEL_MAX}`;
-      this.hud.fuelFill.style.width = `${(this.fuel / FUEL_MAX) * 100}%`;
-    }
+    const hearts = Array.from(this.hud.hpHearts.querySelectorAll<HTMLElement>(".heart"));
+    hearts.forEach((heart, idx) => {
+      if (idx < this.player.hp) {
+        heart.classList.add("filled");
+      } else {
+        heart.classList.remove("filled");
+      }
+    });
 
-    this.hud.comboValue.textContent = `${Math.floor(this.comboGauge)}/${OD_MAX}`;
-    this.hud.comboFill.style.width = `${(this.comboGauge / OD_MAX) * 100}%`;
-
-    this.hud.chainValue.textContent = this.chainLevel > 0 ? `x${this.chainLevel}` : "-";
-
-    const flags: string[] = [];
-    if (this.overdriveActive) {
-      flags.push(`OVERDRIVE ${this.overdriveTimeLeft.toFixed(1)}s`);
-    }
-    if (this.limpMode) {
-      flags.push("LIMP");
-    }
-    this.hud.modeValue.textContent = flags.length > 0 ? flags.join(" | ") : "NORMAL";
+    const fuelPercent = this.overdriveActive ? 1 : this.fuel / FUEL_MAX;
+    const comboPercent = this.comboGauge / OD_MAX;
+    this.hud.fuelFill.style.height = `${Math.round(clamp01(fuelPercent) * 100)}%`;
+    this.hud.comboFill.style.height = `${Math.round(clamp01(comboPercent) * 100)}%`;
 
     this.hud.restartButton.hidden = !this.gameOver;
   }

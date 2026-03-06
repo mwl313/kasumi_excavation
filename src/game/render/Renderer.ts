@@ -151,6 +151,19 @@ export class Renderer {
       ctx.fillText("F", drawX + TILE_SIZE * 0.5, drawY + TILE_SIZE * 0.64);
     }
 
+    if (block.type === "POWERUP") {
+      ctx.fillStyle = "#f8ecff";
+      ctx.beginPath();
+      ctx.arc(
+        drawX + TILE_SIZE * 0.5,
+        drawY + TILE_SIZE * 0.5,
+        TILE_SIZE * 0.16,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+
     if (block.type === "UNBREAKABLE" && block.cracked) {
       ctx.strokeStyle = "#9fa9b4";
       ctx.lineWidth = 2;
@@ -231,6 +244,8 @@ export class Renderer {
         return isFalling ? "#e1b750" : "#c9982f";
       case "FUEL":
         return isFalling ? "#f4a94c" : "#f6bf60";
+      case "POWERUP":
+        return isFalling ? "#8f68d1" : "#9f73e4";
       default:
         return "#7e8b98";
     }
