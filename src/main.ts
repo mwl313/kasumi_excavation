@@ -13,10 +13,12 @@ function requiredById<T extends HTMLElement>(id: string): T {
 
 const lobbyScreen = requiredById<HTMLDivElement>("lobby-screen");
 const gameScreen = requiredById<HTMLDivElement>("game-screen");
+const touchArea = requiredById<HTMLDivElement>("touch-area");
 const btnSingle = requiredById<HTMLButtonElement>("btn-single");
 const btnMulti = requiredById<HTMLButtonElement>("btn-multi");
 const btnSettings = requiredById<HTMLButtonElement>("btn-settings");
-const btnBackLobby = requiredById<HTMLButtonElement>("btn-back-lobby");
+const btnTopLobby = requiredById<HTMLButtonElement>("btn-top-lobby");
+const btnTopSettings = requiredById<HTMLButtonElement>("btn-top-settings");
 
 const settingsOverlay = requiredById<HTMLDivElement>("settings-overlay");
 const settingsBackdrop = requiredById<HTMLDivElement>("settings-backdrop");
@@ -45,6 +47,8 @@ const game = new Game(renderer, {
   comboFill,
   chainValue,
   restartButton
+}, {
+  touchArea
 });
 
 enum UIScreen {
@@ -58,6 +62,7 @@ const SETTINGS_VOICE_KEY = "kasumi_excavation.settings.voice";
 const SETTINGS_VIBRATION_KEY = "kasumi_excavation.settings.vibration";
 
 let activeScreen: UIScreen = UIScreen.LOBBY;
+let paused = false;
 let last = performance.now();
 let accumulator = 0;
 
@@ -69,6 +74,8 @@ restartButton.addEventListener("click", () => {
 });
 
 btnSingle.addEventListener("click", () => {
+  paused = false;
+  game.setPaused(false);
   showScreen(UIScreen.GAME);
   game.restart();
 });
@@ -77,13 +84,19 @@ btnMulti.addEventListener("click", () => {
   window.alert("Coming soon");
 });
 
-btnBackLobby.addEventListener("click", () => {
-  showScreen(UIScreen.LOBBY);
+btnTopLobby.addEventListener("click", () => {
   closeSettings();
+  paused = false;
+  game.setPaused(false);
+  showScreen(UIScreen.LOBBY);
 });
 
 btnSettings.addEventListener("click", () => {
-  openSettings();
+  openSettings({ pauseGame: false });
+});
+
+btnTopSettings.addEventListener("click", () => {
+  openSettings({ pauseGame: true });
 });
 
 settingsClose.addEventListener("click", () => {
@@ -102,6 +115,14 @@ window.addEventListener("keydown", (event) => {
 
 function frame(now: number): void {
   if (activeScreen !== UIScreen.GAME) {
+    requestAnimationFrame(frame);
+    return;
+  }
+
+  if (paused) {
+    last = now;
+    accumulator = 0;
+    game.render();
     requestAnimationFrame(frame);
     return;
   }
@@ -129,12 +150,23 @@ function showScreen(screen: UIScreen): void {
   accumulator = 0;
 }
 
-function openSettings(): void {
+function openSettings(options: { pauseGame: boolean }): void {
   settingsOverlay.hidden = false;
+  if (options.pauseGame && activeScreen === UIScreen.GAME) {
+    paused = true;
+    game.setPaused(true);
+  }
 }
 
 function closeSettings(): void {
+  const wasVisible = !settingsOverlay.hidden;
   settingsOverlay.hidden = true;
+  if (wasVisible && activeScreen === UIScreen.GAME) {
+    paused = false;
+    game.setPaused(false);
+    last = performance.now();
+    accumulator = 0;
+  }
 }
 
 function initializeSettings(): void {

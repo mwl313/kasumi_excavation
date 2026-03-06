@@ -48,6 +48,10 @@ interface HudElements {
   restartButton: HTMLButtonElement;
 }
 
+interface GameOptions {
+  touchArea?: HTMLElement;
+}
+
 export class Game {
   private readonly renderer: IRenderer;
   private readonly input: Input;
@@ -70,11 +74,12 @@ export class Game {
   private turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
   private chainLevel = 0;
   private powerupCount = 0;
+  private paused = false;
 
-  constructor(renderer: IRenderer, hud: HudElements) {
+  constructor(renderer: IRenderer, hud: HudElements, options?: GameOptions) {
     this.hud = hud;
     this.renderer = renderer;
-    this.input = new Input();
+    this.input = new Input(options?.touchArea);
     this.bestDepth = this.loadBestDepth();
 
     const seed = this.newSeed();
@@ -90,6 +95,10 @@ export class Game {
   update(dt: number): void {
     if (this.input.consumeRestart()) {
       this.restart();
+      return;
+    }
+
+    if (this.paused) {
       return;
     }
 
@@ -167,10 +176,18 @@ export class Game {
     this.turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
     this.chainLevel = 0;
     this.powerupCount = 0;
+    this.paused = false;
 
     this.input.clear();
+    this.input.setEnabled(true);
     this.syncGroundedState();
     this.updateHud();
+  }
+
+  setPaused(value: boolean): void {
+    this.paused = value;
+    this.input.setEnabled(!value);
+    this.input.clear();
   }
 
   private handleAction(direction: Direction): ActionOutcome {
