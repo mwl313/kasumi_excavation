@@ -8,7 +8,10 @@ export function createBlock(type: BlockType, color?: BlockColor): Block {
     case "STURDY":
       return makeStaticBlock(type, 2, color ?? pickRandomBlockColor());
     case "UNBREAKABLE":
-      return makeStaticBlock(type, null);
+      return {
+        ...makeStaticBlock(type, null),
+        cracked: false
+      };
     case "EVENT":
       return {
         ...makeStaticBlock(type, 1),
@@ -24,6 +27,7 @@ export function fromFallingMember(source: FallingMember): Block {
     type: source.type,
     hp: source.hp,
     color: source.color,
+    cracked: source.cracked,
     eventId: source.eventId,
     fallState: "STATIC",
     shakeTimer: 0,

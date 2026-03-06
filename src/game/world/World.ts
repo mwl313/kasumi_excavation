@@ -9,13 +9,6 @@ import type {
 } from "../types";
 import { ChunkGenerator } from "./ChunkGen";
 
-interface AnchorFieldRect {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-}
-
 interface ColorComponentCell {
   x: number;
   y: number;
@@ -45,7 +38,6 @@ export class World {
   private readonly excavatedVoids = new Set<string>();
   private readonly cellToGroupId = new Map<string, number>();
   private nextGroupId = 1;
-  private anchorField: AnchorFieldRect | null = null;
 
   constructor(seed: number) {
     this.seed = seed;
@@ -60,22 +52,6 @@ export class World {
     for (let x = 0; x < WORLD_WIDTH; x += 1) {
       this.setBlock(x, 2, createBlock("BASIC", "BLUE"));
     }
-  }
-
-  setAnchorField(rect: AnchorFieldRect | null): void {
-    this.anchorField = rect;
-  }
-
-  isAnchoredVoid(x: number, y: number): boolean {
-    if (!this.anchorField) {
-      return false;
-    }
-    return (
-      x >= this.anchorField.minX &&
-      x <= this.anchorField.maxX &&
-      y >= this.anchorField.minY &&
-      y <= this.anchorField.maxY
-    );
   }
 
   isInsideX(x: number): boolean {
@@ -521,6 +497,7 @@ export class World {
         type: item.block.type,
         hp: item.block.hp,
         color: item.block.color,
+        cracked: item.block.cracked,
         eventId: item.block.eventId
       };
     });
@@ -624,6 +601,7 @@ export class World {
         type: item.block.type,
         hp: item.block.hp,
         color: item.block.color,
+        cracked: item.block.cracked,
         eventId: item.block.eventId
       };
     });
@@ -663,11 +641,7 @@ export class World {
 
   private hasExcavatedVoidBelow(x: number, y: number): boolean {
     const belowY = y + 1;
-    return (
-      this.isStaticCellEmpty(x, belowY) &&
-      this.isExcavatedVoid(x, belowY) &&
-      !this.isAnchoredVoid(x, belowY)
-    );
+    return this.isStaticCellEmpty(x, belowY) && this.isExcavatedVoid(x, belowY);
   }
 
   private ensureChunk(chunkIndex: number): void {

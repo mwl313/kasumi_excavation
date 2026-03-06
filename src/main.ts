@@ -14,16 +14,24 @@ const canvas = requiredById<HTMLCanvasElement>("game-canvas");
 const hpValue = requiredById<HTMLSpanElement>("hp-value");
 const depthValue = requiredById<HTMLSpanElement>("depth-value");
 const bestValue = requiredById<HTMLSpanElement>("best-value");
-const colorValue = requiredById<HTMLSpanElement>("color-value");
-const resValue = requiredById<HTMLSpanElement>("res-value");
+const fuelValue = requiredById<HTMLSpanElement>("fuel-value");
+const fuelFill = requiredById<HTMLDivElement>("fuel-fill");
+const comboValue = requiredById<HTMLSpanElement>("combo-value");
+const comboFill = requiredById<HTMLDivElement>("combo-fill");
+const chainValue = requiredById<HTMLSpanElement>("chain-value");
+const modeValue = requiredById<HTMLSpanElement>("mode-value");
 const restartButton = requiredById<HTMLButtonElement>("restart-btn");
 
 const game = new Game(canvas, {
   hpValue,
   depthValue,
   bestValue,
-  colorValue,
-  resValue,
+  fuelValue,
+  fuelFill,
+  comboValue,
+  comboFill,
+  chainValue,
+  modeValue,
   restartButton
 });
 

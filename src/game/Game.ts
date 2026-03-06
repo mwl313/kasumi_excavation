@@ -1,35 +1,55 @@
 import {
   ACTIVE_CHECK_DOWN_ROWS,
   ACTIVE_CHECK_UP_ROWS,
-  ANCHOR_DURATION,
   BEST_DEPTH_STORAGE_KEY,
   CAMERA_OFFSET_ROWS,
   CAMERA_SMOOTH_SPEED,
+  CHAIN_WINDOW_TURNS,
   CLUSTER_SCAN_DOWN,
   CLUSTER_SCAN_UP,
+  FUEL_COST_INVALID,
+  FUEL_COST_JUMP,
+  FUEL_COST_MINE_ATTEMPT,
+  FUEL_COST_MOVE_EMPTY,
+  FUEL_MAX,
+  FUEL_REBATE_BASE,
+  FUEL_REBATE_CHAIN_CAP,
+  FUEL_REBATE_SCALE,
   GENERATE_AHEAD_ROWS,
+  OD_DURATION,
+  OD_GAIN_BASE,
+  OD_GAIN_CHAIN_CAP,
+  OD_GAIN_SCALE,
+  OD_MAX,
   PLAYER_ACTION_INTERVAL,
   PLAYER_GRAVITY,
-  PLAYER_IFRAME_DURATION,
   PLAYER_MAX_VY,
-  PRUNE_ROWS_ABOVE,
-  RESONANCE_COST,
-  RESONANCE_MAX,
-  WORLD_WIDTH
+  PRUNE_ROWS_ABOVE
 } from "./constants";
 import { Player } from "./entities/Player";
 import { Input } from "./input/Input";
 import { Renderer } from "./render/Renderer";
 import { updateFallingGroups } from "./systems/FallingBlocks";
-import type { Block, BlockColor, Direction } from "./types";
+import type { Block, Direction } from "./types";
 import { World } from "./world/World";
+
+type FuelActionType = "MOVE_EMPTY" | "JUMP" | "MINE_ATTEMPT" | "INVALID";
+
+interface ActionOutcome {
+  fuelAction: FuelActionType;
+  comboAffected: number;
+}
 
 interface HudElements {
   hpValue: HTMLElement;
   depthValue: HTMLElement;
   bestValue: HTMLElement;
-  colorValue: HTMLElement;
-  resValue: HTMLElement;
+  fuelValue: HTMLElement;
+  fuelFill: HTMLElement;
+  comboValue: HTMLElement;
+  comboFill: HTMLElement;
+  chainValue: HTMLElement;
+  modeValue: HTMLElement;
   restartButton: HTMLButtonElement;
 }
 
@@ -46,16 +66,13 @@ export class Game {
   private gameOver = false;
   private cameraY = 0;
 
-  private selectedColor: BlockColor = "RED";
-  private resonance: Record<BlockColor, number> = {
-    RED: 0,
-    BLUE: 0,
-    GREEN: 0,
-    YELLOW: 0
-  };
-  private anchorUntilMs = 0;
-  private anchorCenter: { x: number; y: number } | null = null;
-  private shieldCharges = 0;
+  private fuel = FUEL_MAX;
+  private limpMode = false;
+  private comboGauge = 0;
+  private overdriveActive = false;
+  private overdriveTimeLeft = 0;
+  private turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
+  private chainLevel = 0;
 
   constructor(canvas: HTMLCanvasElement, hud: HudElements) {
     this.hud = hud;
@@ -87,26 +104,17 @@ export class Game {
     }
 
     this.player.updateTimers(dt);
-
-    const selected = this.input.consumeSelectColor();
-    if (selected) {
-      this.selectedColor = selected;
-    }
-
-    if (this.input.consumeCastAbility()) {
-      this.tryCastSelectedAbility();
-    }
+    this.tickOverdrive(dt);
 
     this.actionCooldown = Math.max(0, this.actionCooldown - dt);
     if (this.actionCooldown <= 0) {
       const action = this.input.consumeDirection();
       if (action) {
-        this.handleAction(action);
+        const outcome = this.handleAction(action);
+        this.finalizeActionOutcome(outcome);
         this.actionCooldown = PLAYER_ACTION_INTERVAL;
       }
     }
-
-    this.syncAnchorField(performance.now());
 
     this.world.ensureGeneratedThrough(this.player.y + GENERATE_AHEAD_ROWS);
     this.world.updateInstabilityGroups(
@@ -115,7 +123,7 @@ export class Game {
       this.player.y + ACTIVE_CHECK_DOWN_ROWS
     );
     updateFallingGroups(this.world, this.player, dt, {
-      consumeShieldHit: () => this.consumeShieldOnHit()
+      consumeShieldHit: () => false
     });
     this.applyPlayerGravity(dt);
     this.world.pruneRowsAbove(this.player.y - PRUNE_ROWS_ABOVE);
@@ -151,102 +159,118 @@ export class Game {
     this.depth = 0;
     this.gameOver = false;
     this.actionCooldown = 0;
-    this.selectedColor = "RED";
-    this.resonance = { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 };
-    this.anchorUntilMs = 0;
-    this.anchorCenter = null;
-    this.shieldCharges = 0;
+    this.fuel = FUEL_MAX;
+    this.limpMode = false;
+    this.comboGauge = 0;
+    this.overdriveActive = false;
+    this.overdriveTimeLeft = 0;
+    this.turnsSinceCombo = CHAIN_WINDOW_TURNS + 1;
+    this.chainLevel = 0;
 
     this.input.clear();
-    this.syncAnchorField(performance.now());
     this.syncGroundedState();
     this.updateHud();
   }
 
-  private handleAction(direction: Direction): void {
+  private handleAction(direction: Direction): ActionOutcome {
     this.player.setFacing(direction);
 
     if (direction === "UP") {
-      this.handleUpAction();
-      return;
+      return this.handleUpAction();
     }
 
     if (direction === "DOWN" && !this.player.isGrounded) {
-      return;
+      return { fuelAction: "INVALID", comboAffected: 0 };
     }
 
     const [dx, dy] = deltaForDirection(direction);
     const targetX = this.player.x + dx;
     const targetY = this.player.y + dy;
     if (!this.world.isInsideX(targetX)) {
-      return;
+      return { fuelAction: "INVALID", comboAffected: 0 };
     }
 
-    this.tryMoveOrMine(targetX, targetY);
+    return this.tryMoveOrMine(targetX, targetY, false);
   }
 
-  private handleUpAction(): void {
+  private handleUpAction(): ActionOutcome {
     const targetX = this.player.x;
     const targetY = this.player.y - 1;
     const aboveBlock = this.world.getBlock(targetX, targetY);
 
     if (!aboveBlock) {
       if (!this.player.isGrounded) {
-        return;
+        return { fuelAction: "INVALID", comboAffected: 0 };
+      }
+      if (this.limpMode) {
+        return { fuelAction: "INVALID", comboAffected: 0 };
       }
       if (!this.world.isCellEmpty(targetX, targetY)) {
-        return;
+        return { fuelAction: "INVALID", comboAffected: 0 };
       }
       this.movePlayerTo(targetX, targetY);
       this.player.setAirborne();
-      return;
+      return { fuelAction: "JUMP", comboAffected: 0 };
     }
 
     if (!this.player.isGrounded) {
-      return;
+      return { fuelAction: "INVALID", comboAffected: 0 };
     }
 
-    this.interactWithBlock(aboveBlock, targetX, targetY, true);
+    const comboAffected = this.mineTargetBlock(aboveBlock, targetX, targetY, true);
+    return { fuelAction: "MINE_ATTEMPT", comboAffected };
   }
 
-  private tryMoveOrMine(targetX: number, targetY: number): void {
+  private tryMoveOrMine(targetX: number, targetY: number, isUpward: boolean): ActionOutcome {
     if (!this.world.isCellEmpty(targetX, targetY)) {
       const targetBlock = this.world.getBlock(targetX, targetY);
       if (!targetBlock) {
-        return;
+        return { fuelAction: "INVALID", comboAffected: 0 };
       }
-      this.interactWithBlock(targetBlock, targetX, targetY, false);
-      return;
+      const comboAffected = this.mineTargetBlock(targetBlock, targetX, targetY, isUpward);
+      return { fuelAction: "MINE_ATTEMPT", comboAffected };
     }
 
     this.movePlayerTo(targetX, targetY);
+    return { fuelAction: "MOVE_EMPTY", comboAffected: 0 };
   }
 
-  private interactWithBlock(
-    block: Block,
-    targetX: number,
-    targetY: number,
-    isUpward: boolean
-  ): void {
-    if (block.type === "UNBREAKABLE") {
-      return;
+  private mineTargetBlock(block: Block, targetX: number, targetY: number, isUpward: boolean): number {
+    const triggerColor = block.color;
+
+    if (this.overdriveActive) {
+      const broke = this.applyOverdriveMining(block, targetX, targetY, isUpward);
+      return broke && triggerColor
+        ? this.tryClusterFromAction(targetX, targetY, triggerColor)
+        : 0;
     }
 
-    const triggerColor = block.color;
+    if (this.limpMode) {
+      const broke = this.applyLimpMining(block, targetX, targetY, isUpward);
+      return broke && triggerColor
+        ? this.tryClusterFromAction(targetX, targetY, triggerColor)
+        : 0;
+    }
+
+    const broke = this.applyNormalMining(block, targetX, targetY, isUpward);
+    return broke && triggerColor
+      ? this.tryClusterFromAction(targetX, targetY, triggerColor)
+      : 0;
+  }
+
+  private applyNormalMining(block: Block, targetX: number, targetY: number, isUpward: boolean): boolean {
+    if (block.type === "UNBREAKABLE") {
+      return false;
+    }
 
     if (block.type === "STURDY") {
       const nextHp = (block.hp ?? 2) - 1;
       block.hp = Math.max(0, nextHp);
       if (block.hp > 0) {
-        return;
+        return false;
       }
-      this.world.excavateBlock(targetX, targetY);
-      this.movePlayerTo(targetX, targetY);
-      if (isUpward) {
-        this.player.setAirborne();
-      }
-      this.applyClusterResonance(targetX, targetY, triggerColor);
-      return;
+      this.breakAndMove(targetX, targetY, isUpward);
+      return true;
     }
 
     if (block.type === "EVENT") {
@@ -254,19 +278,65 @@ export class Game {
       console.log(`[EVENT] Triggered: ${eventName}`);
     }
 
+    this.breakAndMove(targetX, targetY, isUpward);
+    return true;
+  }
+
+  private applyLimpMining(block: Block, targetX: number, targetY: number, isUpward: boolean): boolean {
+    if (block.type === "UNBREAKABLE") {
+      return false;
+    }
+
+    if (block.type === "STURDY") {
+      return false;
+    }
+
+    if (block.type === "BASIC") {
+      const currentHp = block.hp ?? 1;
+      if (currentHp > 1) {
+        block.hp = currentHp - 1;
+        return false;
+      }
+      if (currentHp === 1) {
+        block.hp = 0;
+        return false;
+      }
+      this.breakAndMove(targetX, targetY, isUpward);
+      return true;
+    }
+
+    this.breakAndMove(targetX, targetY, isUpward);
+    return true;
+  }
+
+  private applyOverdriveMining(block: Block, targetX: number, targetY: number, isUpward: boolean): boolean {
+    if (block.type === "UNBREAKABLE") {
+      if (!block.cracked) {
+        block.cracked = true;
+        return false;
+      }
+      this.breakAndMove(targetX, targetY, isUpward);
+      return true;
+    }
+
+    if (block.type === "STURDY") {
+      this.breakAndMove(targetX, targetY, isUpward);
+      return true;
+    }
+
+    this.breakAndMove(targetX, targetY, isUpward);
+    return true;
+  }
+
+  private breakAndMove(targetX: number, targetY: number, isUpward: boolean): void {
     this.world.excavateBlock(targetX, targetY);
     this.movePlayerTo(targetX, targetY);
     if (isUpward) {
       this.player.setAirborne();
     }
-    this.applyClusterResonance(targetX, targetY, triggerColor);
   }
 
-  private applyClusterResonance(x: number, y: number, color: BlockColor | undefined): void {
-    if (!color) {
-      return;
-    }
-
+  private tryClusterFromAction(x: number, y: number, color: NonNullable<Block["color"]>): number {
     const result = this.world.tryClusterClearFrom(x, y, color, {
       source: "MINING",
       minY: this.player.y - CLUSTER_SCAN_UP,
@@ -274,109 +344,88 @@ export class Game {
     });
 
     if (result.totalAffected <= 0) {
+      return 0;
+    }
+
+    return result.removedBasic + result.damagedSturdy + result.removedSturdy;
+  }
+
+  private finalizeActionOutcome(outcome: ActionOutcome): void {
+    this.applyFuelCost(outcome.fuelAction);
+    this.turnsSinceCombo += 1;
+
+    if (outcome.comboAffected > 0) {
+      this.applyComboEvent(outcome.comboAffected);
+    }
+  }
+
+  private applyFuelCost(actionType: FuelActionType): void {
+    if (this.overdriveActive || this.limpMode) {
       return;
     }
 
-    this.resonance[color] = Math.min(RESONANCE_MAX, this.resonance[color] + result.totalAffected);
+    const cost = fuelCostForAction(actionType);
+    this.fuel = Math.max(0, this.fuel - cost);
+    if (this.fuel <= 0) {
+      this.fuel = 0;
+      this.limpMode = true;
+    }
   }
 
-  private tryCastSelectedAbility(): void {
-    if (this.resonance[this.selectedColor] < RESONANCE_COST) {
+  private applyComboEvent(affected: number): void {
+    if (this.turnsSinceCombo <= CHAIN_WINDOW_TURNS) {
+      this.chainLevel = this.chainLevel > 0 ? this.chainLevel + 1 : 1;
+    } else {
+      this.chainLevel = 1;
+    }
+    this.turnsSinceCombo = 0;
+
+    const rebate =
+      FUEL_REBATE_BASE +
+      affected * FUEL_REBATE_SCALE +
+      Math.min(FUEL_REBATE_CHAIN_CAP, this.chainLevel);
+    this.fuel = Math.min(FUEL_MAX, this.fuel + rebate);
+    if (this.fuel >= 1) {
+      this.limpMode = false;
+    }
+
+    if (this.overdriveActive) {
       return;
     }
 
-    this.resonance[this.selectedColor] -= RESONANCE_COST;
+    const gain =
+      OD_GAIN_BASE +
+      affected * OD_GAIN_SCALE +
+      Math.min(OD_GAIN_CHAIN_CAP, this.chainLevel * 2);
+    this.comboGauge = Math.min(OD_MAX, this.comboGauge + gain);
 
-    switch (this.selectedColor) {
-      case "RED":
-        this.castRedOverheatBurst();
-        break;
-      case "BLUE":
-        this.castBlueAnchorField();
-        break;
-      case "GREEN":
-        this.castGreenShield();
-        break;
-      case "YELLOW":
-        this.castYellowHorizontalBore();
-        break;
-      default:
-        break;
+    if (this.comboGauge >= OD_MAX) {
+      this.startOverdrive();
     }
   }
 
-  private castRedOverheatBurst(): void {
-    for (let dy = -1; dy <= 1; dy += 1) {
-      for (let dx = -1; dx <= 1; dx += 1) {
-        this.applyAbilityImpactAt(this.player.x + dx, this.player.y + dy);
-      }
-    }
+  private startOverdrive(): void {
+    this.overdriveActive = true;
+    this.overdriveTimeLeft = OD_DURATION;
+    this.comboGauge = OD_MAX;
+    this.fuel = FUEL_MAX;
+    this.limpMode = false;
   }
 
-  private castBlueAnchorField(): void {
-    this.anchorCenter = { x: this.player.x, y: this.player.y };
-    this.anchorUntilMs = performance.now() + ANCHOR_DURATION * 1000;
-  }
-
-  private castGreenShield(): void {
-    this.shieldCharges = 1;
-  }
-
-  private castYellowHorizontalBore(): void {
-    for (let x = 0; x < WORLD_WIDTH; x += 1) {
-      this.applyAbilityImpactAt(x, this.player.y);
-    }
-  }
-
-  private applyAbilityImpactAt(x: number, y: number): void {
-    if (!this.world.isInsideX(x)) {
+  private tickOverdrive(dt: number): void {
+    if (!this.overdriveActive) {
       return;
     }
 
-    const block = this.world.getBlock(x, y);
-    if (!block) {
-      return;
+    this.overdriveTimeLeft -= dt;
+    const ratio = clamp01(this.overdriveTimeLeft / OD_DURATION);
+    this.comboGauge = Math.ceil(OD_MAX * ratio);
+
+    if (this.overdriveTimeLeft <= 0) {
+      this.overdriveActive = false;
+      this.overdriveTimeLeft = 0;
+      this.comboGauge = 0;
     }
-
-    if (block.type === "UNBREAKABLE") {
-      return;
-    }
-
-    if (block.type === "STURDY") {
-      const nextHp = (block.hp ?? 2) - 1;
-      block.hp = Math.max(0, nextHp);
-      if (block.hp <= 0) {
-        this.world.excavateBlock(x, y);
-      }
-      return;
-    }
-
-    this.world.excavateBlock(x, y);
-  }
-
-  private syncAnchorField(nowMs: number): void {
-    if (!this.anchorCenter || nowMs >= this.anchorUntilMs) {
-      this.anchorCenter = null;
-      this.world.setAnchorField(null);
-      return;
-    }
-
-    this.world.setAnchorField({
-      minX: this.anchorCenter.x - 1,
-      maxX: this.anchorCenter.x + 1,
-      minY: this.anchorCenter.y + 1,
-      maxY: this.anchorCenter.y + 4
-    });
-  }
-
-  private consumeShieldOnHit(): boolean {
-    if (this.shieldCharges <= 0) {
-      return false;
-    }
-
-    this.shieldCharges -= 1;
-    this.player.iFrameTimer = Math.max(this.player.iFrameTimer, PLAYER_IFRAME_DURATION * 0.5);
-    return true;
   }
 
   private movePlayerTo(x: number, y: number): void {
@@ -464,13 +513,23 @@ export class Game {
     this.hud.hpValue.textContent = String(this.player.hp);
     this.hud.depthValue.textContent = String(this.depth);
     this.hud.bestValue.textContent = String(this.bestDepth);
-    this.hud.colorValue.textContent = this.selectedColor;
 
-    const resText = `R:${this.resonance.RED} B:${this.resonance.BLUE} G:${this.resonance.GREEN} Y:${this.resonance.YELLOW}`;
-    const shieldText = this.shieldCharges > 0 ? " | Shield:ON" : "";
-    const anchorActive = this.anchorCenter && performance.now() < this.anchorUntilMs;
-    const anchorText = anchorActive ? " | Anchor:ON" : "";
-    this.hud.resValue.textContent = `${resText}${shieldText}${anchorText}`;
+    this.hud.fuelValue.textContent = `${Math.floor(this.fuel)}/${FUEL_MAX}`;
+    this.hud.fuelFill.style.width = `${(this.fuel / FUEL_MAX) * 100}%`;
+
+    this.hud.comboValue.textContent = `${Math.floor(this.comboGauge)}/${OD_MAX}`;
+    this.hud.comboFill.style.width = `${(this.comboGauge / OD_MAX) * 100}%`;
+
+    this.hud.chainValue.textContent = this.chainLevel > 0 ? `x${this.chainLevel}` : "-";
+
+    const flags: string[] = [];
+    if (this.overdriveActive) {
+      flags.push(`OVERDRIVE ${this.overdriveTimeLeft.toFixed(1)}s`);
+    }
+    if (this.limpMode) {
+      flags.push("LIMP");
+    }
+    this.hud.modeValue.textContent = flags.length > 0 ? flags.join(" | ") : "NORMAL";
 
     this.hud.restartButton.hidden = !this.gameOver;
   }
@@ -520,4 +579,22 @@ function moveToward(current: number, target: number, maxDelta: number): number {
     return target;
   }
   return current + Math.sign(delta) * maxDelta;
+}
+
+function fuelCostForAction(action: FuelActionType): number {
+  switch (action) {
+    case "MOVE_EMPTY":
+      return FUEL_COST_MOVE_EMPTY;
+    case "JUMP":
+      return FUEL_COST_JUMP;
+    case "MINE_ATTEMPT":
+      return FUEL_COST_MINE_ATTEMPT;
+    case "INVALID":
+    default:
+      return FUEL_COST_INVALID;
+  }
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

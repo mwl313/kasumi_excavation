@@ -9,6 +9,7 @@ export interface Block {
   type: BlockType;
   hp: number | null;
   color?: BlockColor;
+  cracked?: boolean;
   eventId?: string;
   fallState: FallState;
   shakeTimer: number;
@@ -22,6 +23,7 @@ export interface FallingMember {
   type: BlockType;
   hp: number | null;
   color?: BlockColor;
+  cracked?: boolean;
   eventId?: string;
 }
 

@@ -1,4 +1,4 @@
-import type { BlockColor, Direction } from "../types";
+import type { Direction } from "../types";
 
 const DIRECTION_KEYS: Record<string, Direction> = {
   arrowup: "UP",
@@ -11,18 +11,9 @@ const DIRECTION_KEYS: Record<string, Direction> = {
   d: "RIGHT"
 };
 
-const COLOR_KEYS: Record<string, BlockColor> = {
-  "1": "RED",
-  "2": "BLUE",
-  "3": "GREEN",
-  "4": "YELLOW"
-};
-
 export class Input {
   private readonly queue: Direction[] = [];
-  private readonly colorQueue: BlockColor[] = [];
   private restartRequested = false;
-  private castRequested = false;
   private readonly onKeyDownBound: (event: KeyboardEvent) => void;
 
   constructor() {
@@ -36,23 +27,11 @@ export class Input {
 
   clear(): void {
     this.queue.length = 0;
-    this.colorQueue.length = 0;
     this.restartRequested = false;
-    this.castRequested = false;
   }
 
   consumeDirection(): Direction | null {
     return this.queue.shift() ?? null;
-  }
-
-  consumeSelectColor(): BlockColor | null {
-    return this.colorQueue.shift() ?? null;
-  }
-
-  consumeCastAbility(): boolean {
-    const value = this.castRequested;
-    this.castRequested = false;
-    return value;
   }
 
   consumeRestart(): boolean {
@@ -65,21 +44,6 @@ export class Input {
     const key = event.key.toLowerCase();
     if (key === "r") {
       this.restartRequested = true;
-      event.preventDefault();
-      return;
-    }
-
-    if (key === "q") {
-      this.castRequested = true;
-      event.preventDefault();
-      return;
-    }
-
-    const selectedColor = COLOR_KEYS[key];
-    if (selectedColor) {
-      if (this.colorQueue.length < 4) {
-        this.colorQueue.push(selectedColor);
-      }
       event.preventDefault();
       return;
     }

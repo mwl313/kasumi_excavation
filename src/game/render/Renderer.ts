@@ -51,6 +51,7 @@ export class Renderer {
           type: member.type,
           hp: member.hp,
           color: member.color,
+          cracked: member.cracked,
           eventId: member.eventId,
           fallState: "FALLING",
           shakeTimer: 0,
@@ -141,6 +142,18 @@ export class Renderer {
         Math.PI * 2
       );
       ctx.fill();
+    }
+
+    if (block.type === "UNBREAKABLE" && block.cracked) {
+      ctx.strokeStyle = "#9fa9b4";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(drawX + TILE_SIZE * 0.2, drawY + TILE_SIZE * 0.2);
+      ctx.lineTo(drawX + TILE_SIZE * 0.5, drawY + TILE_SIZE * 0.5);
+      ctx.lineTo(drawX + TILE_SIZE * 0.78, drawY + TILE_SIZE * 0.32);
+      ctx.moveTo(drawX + TILE_SIZE * 0.42, drawY + TILE_SIZE * 0.58);
+      ctx.lineTo(drawX + TILE_SIZE * 0.62, drawY + TILE_SIZE * 0.82);
+      ctx.stroke();
     }
   }
 

@@ -12,10 +12,28 @@
           <span>HP: <strong id="hp-value">3</strong></span>
           <span>Depth: <strong id="depth-value">0</strong></span>
           <span>Best: <strong id="best-value">0</strong></span>
-          <span>Color: <strong id="color-value">RED</strong></span>
-          <span>Res: <strong id="res-value">R:0 B:0 G:0 Y:0</strong></span>
         </div>
         <button id="restart-btn" type="button" hidden>Restart (R)</button>
+      </div>
+      <div class="resources">
+        <div class="meter-row">
+          <span class="meter-label">Fuel</span>
+          <div class="meter-track">
+            <div id="fuel-fill" class="meter-fill fuel"></div>
+          </div>
+          <strong id="fuel-value">100/100</strong>
+        </div>
+        <div class="meter-row">
+          <span class="meter-label">ComboGauge</span>
+          <div class="meter-track">
+            <div id="combo-fill" class="meter-fill combo"></div>
+          </div>
+          <strong id="combo-value">0/100</strong>
+        </div>
+        <div class="status-row">
+          <span>Chain: <strong id="chain-value">-</strong></span>
+          <span>Mode: <strong id="mode-value">NORMAL</strong></span>
+        </div>
       </div>
       <canvas id="game-canvas" width="392" height="840"></canvas>
     </div>

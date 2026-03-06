@@ -1,36 +1,93 @@
-# Kasumi Excavation Prototype
+# Kasumi Excavation (Prototype)
 
-Single-player endless 7-column dig/jump prototype built with TypeScript + Vite + Canvas 2D.
+7칸 맵을 아래로 계속 파고 내려가는 싱글플레이 프로토타입입니다.
 
-## Run
+## 실행 방법
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Controls
+## 조작법
 
-- Move / Mine: Arrow keys or `WASD`
-- Jump / Up mining: `ArrowUp` or `W`
-- Restart: `R` or restart button on game over
+- 이동/채굴: 방향키 또는 `WASD`
+- 점프/위쪽 채굴: `↑` 또는 `W`
+- 재시작: `R` (게임오버 시 버튼도 가능)
 
-## Architecture (short)
+## 현재 구현된 게임 로직
 
-- `src/main.ts`: app bootstrap + fixed timestep loop
-- `src/game/Game.ts`: gameplay orchestration (input, player actions, gravity, world updates, HUD)
-- `src/game/world/World.ts`: static grid, chunk generation integration, instability/shaking handling, pruning
-- `src/game/world/ChunkGen.ts`: seed-based deterministic chunk/row generation with anti-softlock empty cell guarantee
-- `src/game/systems/FallingBlocks.ts`: falling physics, landing snap, player hit/push + i-frames
-- `src/game/render/Renderer.ts`: Canvas rendering for tiles, falling blocks, player triangle, game-over overlay
-- `src/game/input/Input.ts`: keyboard input queue (`arrows` + `WASD`) + restart key
+- 플레이어는 1칸 크기이며 HP는 3입니다.
+- 좌/우/아래로 이동 시도는 곧 채굴입니다.
+- 위가 비어 있으면 1칸 점프, 위가 블록이면 위쪽 채굴이 됩니다.
+- 플레이어 낙하는 중력/가속도 기반으로 동작합니다.
+- 카메라는 플레이어를 부드럽게 따라옵니다.
 
-## Notes
+## 블록 종류
 
-- `bestDepth` is persisted in `localStorage`.
-- Open-question defaults from the spec are applied:
-  - Up mining breaks and moves upward on break.
-  - Down input in air is ignored.
-  - If both push sides are blocked, only HP decreases.
-  - Unbreakable blocks can also become unstable and fall.
-  - Player gravity uses tile-step timer.
+- BASIC: 1번에 부서짐
+- STURDY: 2번 때려야 부서짐 (처음엔 내구도만 감소)
+- UNBREAKABLE: 절대 안 부서지고, 흔들리거나 떨어지지도 않음
+- EVENT: 기본적으로 제거 가능한 특수 블록
+
+## 낙하 규칙
+
+- 블록 아래가 "플레이어가 파서 만든 빈칸"일 때만 흔들림/낙하가 시작됩니다.
+- 자연 생성 빈칸만으로는 낙하가 시작되지 않습니다.
+- 낙하는 그룹 단위로 처리됩니다.
+- 플레이어가 떨어지는 그룹 위에 서 있으면 같이 내려갑니다.
+- 떨어지는 그룹에 맞으면 밀려나고 피해를 입습니다(짧은 무적 시간 있음).
+
+## 색상/클러스터 규칙
+
+- BASIC/STURDY는 4색(빨강/파랑/초록/노랑)을 가집니다.
+- 같은 색이 상하좌우로 4칸 이상 연결된 상태에서 채굴 트리거가 발생하면 클러스터 효과가 발동합니다.
+- BASIC은 제거되고, STURDY는 내구도만 1 감소(0이면 제거)합니다.
+- 클러스터로 제거된 칸도 "파낸 빈칸"으로 처리되어 이후 낙하에 영향을 줍니다.
+
+## 연료(Fuel) 시스템
+
+- 모든 행동은 연료를 소모합니다.
+  - 빈칸 이동: -1
+  - 점프: -2
+  - 채굴 시도: -3
+  - 불가 행동: -1
+- 연료가 0이 되면 **림프 모드(Limp)** 로 전환됩니다.
+- 클러스터 콤보가 발생하면 연료를 환급받아 다시 회복할 수 있습니다.
+
+## 림프 모드(Limp)
+
+연료가 0일 때 적용됩니다.
+
+- 점프 불가
+- BASIC은 2번 때려야 파괴
+- STURDY는 채굴 불가
+- 림프 상태에서는 연료 소모 0
+- 연료가 1 이상 회복되면 림프 해제
+
+## 체인 + 콤보 게이지 + 오버드라이브
+
+- 클러스터 콤보가 발생하면 체인 레벨이 올라갑니다(일정 턴 안에 이어서 콤보 시 유지).
+- 콤보 시:
+  - 연료 환급
+  - 콤보 게이지(Overdrive 게이지) 충전
+- 게이지가 최대에 도달하면 **오버드라이브가 자동 발동**됩니다.
+
+오버드라이브 중:
+
+- 연료 소모 0
+- STURDY 1타 파괴
+- UNBREAKABLE은 2단계 파괴 가능
+  - 1타: 균열
+  - 2타: 파괴
+- 제한 시간이 끝나면 오버드라이브 종료
+
+## 맵 생성 특징
+
+- 맵은 시드 기반으로 계속 생성됩니다.
+- 같은 색이 모이도록 유도하지만, 너무 큰 단일 색 덩어리는 제한합니다.
+- 콤보가 너무 적거나 너무 많지 않게 밀도를 자동 조정합니다.
+
+## 저장
+
+- 최고 깊이(best depth)는 `localStorage`에 저장됩니다.

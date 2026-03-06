@@ -24,7 +24,7 @@ body {
 #app {
   width: min(100vw - 24px, 460px);
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .hud {
@@ -42,6 +42,52 @@ body {
   flex-wrap: wrap;
   gap: 12px;
   font-size: 14px;
+}
+
+.resources {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #2a3a4a;
+  background: rgba(8, 13, 20, 0.7);
+}
+
+.meter-row {
+  display: grid;
+  grid-template-columns: 86px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.meter-label {
+  color: #d0d8df;
+}
+
+.meter-track {
+  height: 12px;
+  border: 1px solid #304154;
+  background: #0d151f;
+}
+
+.meter-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.12s linear;
+}
+
+.meter-fill.fuel {
+  background: linear-gradient(90deg, #6ccf75, #3fa959);
+}
+
+.meter-fill.combo {
+  background: linear-gradient(90deg, #f0b14d, #e07c2d);
+}
+
+.status-row {
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
 }
 
 #restart-btn {
