@@ -13,6 +13,11 @@ function requiredById<T extends HTMLElement>(id: string): T {
 
 const lobbyScreen = requiredById<HTMLDivElement>("lobby-screen");
 const gameScreen = requiredById<HTMLDivElement>("game-screen");
+const gameShellNode = gameScreen.querySelector(".game-shell");
+if (!gameShellNode) {
+  throw new Error("Missing required element: .game-shell");
+}
+const gameShell = gameShellNode as HTMLDivElement;
 const touchArea = requiredById<HTMLDivElement>("touch-area");
 const btnSingle = requiredById<HTMLButtonElement>("btn-single");
 const btnMulti = requiredById<HTMLButtonElement>("btn-multi");
@@ -68,6 +73,7 @@ let accumulator = 0;
 
 initializeSettings();
 showScreen(UIScreen.LOBBY);
+fitGameShellToViewport();
 
 restartButton.addEventListener("click", () => {
   game.restart();
@@ -113,6 +119,16 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
+window.addEventListener("resize", () => {
+  requestAnimationFrame(fitGameShellToViewport);
+});
+
+window.addEventListener("orientationchange", () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(fitGameShellToViewport);
+  });
+});
+
 function frame(now: number): void {
   if (activeScreen !== UIScreen.GAME) {
     requestAnimationFrame(frame);
@@ -148,6 +164,16 @@ function showScreen(screen: UIScreen): void {
   gameScreen.hidden = screen !== UIScreen.GAME;
   last = performance.now();
   accumulator = 0;
+
+  if (screen === UIScreen.GAME) {
+    requestAnimationFrame(() => fitGameShellToViewport());
+  } else {
+    gameShell.style.transform = "";
+    gameShell.style.transformOrigin = "";
+    gameShell.style.left = "";
+    gameShell.style.position = "";
+    gameShell.style.margin = "";
+  }
 }
 
 function openSettings(options: { pauseGame: boolean }): void {
@@ -156,6 +182,7 @@ function openSettings(options: { pauseGame: boolean }): void {
     paused = true;
     game.setPaused(true);
   }
+  requestAnimationFrame(fitGameShellToViewport);
 }
 
 function closeSettings(): void {
@@ -167,6 +194,7 @@ function closeSettings(): void {
     last = performance.now();
     accumulator = 0;
   }
+  requestAnimationFrame(fitGameShellToViewport);
 }
 
 function initializeSettings(): void {
@@ -217,4 +245,40 @@ function loadNumber(key: string, fallback: number): number {
   }
   const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function fitGameShellToViewport(): void {
+  if (activeScreen !== UIScreen.GAME) {
+    return;
+  }
+  if (gameScreen.hidden) {
+    return;
+  }
+
+  const viewportW = window.visualViewport?.width ?? window.innerWidth;
+  const viewportH = window.visualViewport?.height ?? window.innerHeight;
+  const bodyStyles = window.getComputedStyle(document.body);
+  const padX = parseFloat(bodyStyles.paddingLeft) || 8;
+  const padY = parseFloat(bodyStyles.paddingTop) || 8;
+
+  gameShell.style.position = "relative";
+  gameShell.style.left = "50%";
+  gameShell.style.margin = "0";
+  gameShell.style.transformOrigin = "top center";
+  gameShell.style.transform = "translateX(-50%) scale(1)";
+
+  const rect = gameShell.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
+
+  const availableW = Math.max(0, viewportW - padX * 2);
+  const availableH = Math.max(0, viewportH - padY * 2);
+
+  const scaleX = availableW / rect.width;
+  const scaleY = availableH / rect.height;
+  const scale = Math.min(scaleX, scaleY, 1);
+
+  gameShell.style.transformOrigin = "top center";
+  gameShell.style.transform = `translateX(-50%) scale(${scale})`;
 }
