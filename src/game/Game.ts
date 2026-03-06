@@ -26,7 +26,7 @@ import {
 } from "./constants";
 import { Player } from "./entities/Player";
 import { Input } from "./input/Input";
-import { Renderer } from "./render/Renderer";
+import type { IRenderer } from "./render/IRenderer";
 import { updateFallingGroups } from "./systems/FallingBlocks";
 import type { Block, Direction } from "./types";
 import { World } from "./world/World";
@@ -49,7 +49,7 @@ interface HudElements {
 }
 
 export class Game {
-  private readonly renderer: Renderer;
+  private readonly renderer: IRenderer;
   private readonly input: Input;
   private readonly hud: HudElements;
 
@@ -71,9 +71,9 @@ export class Game {
   private chainLevel = 0;
   private powerupCount = 0;
 
-  constructor(canvas: HTMLCanvasElement, hud: HudElements) {
+  constructor(renderer: IRenderer, hud: HudElements) {
     this.hud = hud;
-    this.renderer = new Renderer(canvas);
+    this.renderer = renderer;
     this.input = new Input();
     this.bestDepth = this.loadBestDepth();
 
@@ -143,7 +143,7 @@ export class Game {
   }
 
   render(): void {
-    this.renderer.render(this.world, this.player, this.gameOver, this.cameraY);
+    this.renderer.render(this, { nowMs: performance.now() });
   }
 
   restart(): void {

@@ -144,7 +144,6 @@ body {
 }
 
 #restart-btn {
-  margin-top: auto;
   background: #d35454;
   color: #fff;
   border: none;
@@ -155,4 +154,154 @@ body {
 
 #restart-btn:hover {
   background: #bd4141;
+}
+
+.secondary-btn {
+  margin-top: auto;
+  background: #2a3948;
+  color: #dce8f0;
+  border: 1px solid #3a4d60;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.secondary-btn:hover {
+  filter: brightness(1.06);
+}
+
+.screen {
+  width: 100%;
+}
+
+#lobby-screen {
+  height: 840px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #283849;
+  background: rgba(8, 13, 20, 0.45);
+}
+
+.lobby-panel {
+  width: min(92vw, 420px);
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid #2a3a4a;
+  background: rgba(8, 13, 20, 0.86);
+}
+
+.lobby-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.lobby-subtitle {
+  font-size: 14px;
+  opacity: 0.85;
+  margin-bottom: 14px;
+}
+
+.lobby-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-btn {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #304254;
+  background: #142131;
+  color: #dce8f0;
+  cursor: pointer;
+}
+
+.lobby-btn.primary {
+  background: #4f84c6;
+  border-color: #4f84c6;
+  color: #ffffff;
+}
+
+.lobby-btn:hover {
+  filter: brightness(1.06);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.screen[hidden],
+.overlay[hidden] {
+  display: none !important;
+}
+
+.overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.overlay-panel {
+  position: relative;
+  width: min(92vw, 420px);
+  border-radius: 12px;
+  border: 1px solid #2a3a4a;
+  background: rgba(8, 13, 20, 0.94);
+  padding: 14px;
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.overlay-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #dce8f0;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 2px;
+  border-bottom: 1px solid rgba(48, 66, 84, 0.5);
+}
+
+.setting-row input[type="range"] {
+  width: 180px;
+}
+
+.radio-group {
+  display: flex;
+  gap: 14px;
+}
+
+.radio-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-note {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.75;
 }

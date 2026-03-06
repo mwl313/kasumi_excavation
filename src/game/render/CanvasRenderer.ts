@@ -7,8 +7,9 @@ import {
 import { Player } from "../entities/Player";
 import type { Block, BlockColor, Direction } from "../types";
 import { World } from "../world/World";
+import type { IRenderer, RenderContext } from "./IRenderer";
 
-export class Renderer {
+export class CanvasRenderer implements IRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
 
@@ -24,11 +25,15 @@ export class Renderer {
     this.ctx = ctx;
   }
 
-  render(world: World, player: Player, gameOver: boolean, cameraY: number): void {
+  render(game: any, ctx: RenderContext): void {
+    const world = game.world as World;
+    const player = game.player as Player;
+    const gameOver = game.gameOver as boolean;
+    const cameraY = game.cameraY as number;
     const visibleRows = Math.ceil(this.canvas.height / TILE_SIZE) + 3;
     const minY = Math.floor(cameraY) - 1;
     const maxY = minY + visibleRows;
-    const now = performance.now();
+    const now = ctx.nowMs;
 
     this.drawBackground();
     this.drawGrid(cameraY);
