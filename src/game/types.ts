@@ -3,12 +3,14 @@ export type PlayerState = "Grounded" | "Airborne";
 
 export type BlockType = "BASIC" | "STURDY" | "UNBREAKABLE" | "EVENT" | "FUEL" | "POWERUP";
 export type BlockColor = "RED" | "BLUE" | "GREEN" | "YELLOW";
+export type BlockVisualId = "SURFACE_DIRT" | "SURFACE_GRASS";
 export type FallState = "STATIC" | "SHAKING" | "FALLING";
 
 export interface Block {
   type: BlockType;
   hp: number | null;
   color?: BlockColor;
+  visualId?: BlockVisualId;
   cracked?: boolean;
   eventId?: string;
   fallState: FallState;
@@ -23,6 +25,7 @@ export interface FallingMember {
   type: BlockType;
   hp: number | null;
   color?: BlockColor;
+  visualId?: BlockVisualId;
   cracked?: boolean;
   eventId?: string;
 }

@@ -1,5 +1,5 @@
 import { BLOCK_SHAKE_DURATION, CHUNK_HEIGHT, CLUSTER_MIN_SIZE, WORLD_WIDTH } from "../constants";
-import { createBlock } from "../entities/Block";
+import { createSurfaceDirtBlock, createSurfaceGrassBlock } from "../entities/Block";
 import type {
   Block,
   BlockColor,
@@ -47,10 +47,10 @@ export class World {
   initializeSpawn(spawnX: number, spawnY: number): void {
     this.ensureGeneratedThrough(spawnY + CHUNK_HEIGHT);
     this.removeBlock(spawnX, spawnY);
-    this.setBlock(spawnX, spawnY + 1, createBlock("BASIC", "BLUE"));
 
     for (let x = 0; x < WORLD_WIDTH; x += 1) {
-      this.setBlock(x, 2, createBlock("BASIC", "BLUE"));
+      this.setBlock(x, 1, createSurfaceGrassBlock());
+      this.setBlock(x, 2, createSurfaceDirtBlock());
     }
   }
 
@@ -497,6 +497,7 @@ export class World {
         type: item.block.type,
         hp: item.block.hp,
         color: item.block.color,
+        visualId: item.block.visualId,
         cracked: item.block.cracked,
         eventId: item.block.eventId
       };
@@ -601,6 +602,7 @@ export class World {
         type: item.block.type,
         hp: item.block.hp,
         color: item.block.color,
+        visualId: item.block.visualId,
         cracked: item.block.cracked,
         eventId: item.block.eventId
       };

@@ -26,11 +26,28 @@ export function createBlock(type: BlockType, color?: BlockColor): Block {
   }
 }
 
+export function createSurfaceDirtBlock(): Block {
+  return {
+    ...makeStaticBlock("EVENT", 1),
+    eventId: "surface_dirt",
+    visualId: "SURFACE_DIRT"
+  };
+}
+
+export function createSurfaceGrassBlock(): Block {
+  return {
+    ...makeStaticBlock("EVENT", 1),
+    eventId: "surface_grass",
+    visualId: "SURFACE_GRASS"
+  };
+}
+
 export function fromFallingMember(source: FallingMember): Block {
   return {
     type: source.type,
     hp: source.hp,
     color: source.color,
+    visualId: source.visualId,
     cracked: source.cracked,
     eventId: source.eventId,
     fallState: "STATIC",

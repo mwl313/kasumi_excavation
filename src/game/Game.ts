@@ -299,7 +299,9 @@ export class Game {
 
     if (block.type === "EVENT") {
       const eventName = block.eventId ?? "placeholder_event";
-      console.log(`[EVENT] Triggered: ${eventName}`);
+      if (eventName !== "surface_dirt" && eventName !== "surface_grass") {
+        console.log(`[EVENT] Triggered: ${eventName}`);
+      }
     }
 
     this.breakAndMove(targetX, targetY, isUpward);

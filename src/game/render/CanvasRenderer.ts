@@ -9,9 +9,25 @@ import type { Block, BlockColor, Direction } from "../types";
 import { World } from "../world/World";
 import type { IRenderer, RenderContext } from "./IRenderer";
 
+const BLOCK_ASSET_SOURCES: Record<string, string> = {
+  basic_blue: "/assets/blocks/cobble.webp",
+  basic_red: "/assets/blocks/granite.webp",
+  basic_green: "/assets/blocks/marble.webp",
+  basic_yellow: "/assets/blocks/sandstone.webp",
+  sturdy_blue: "/assets/blocks/cobble_hard.webp",
+  sturdy_red: "/assets/blocks/granite_hard.webp",
+  sturdy_green: "/assets/blocks/polished_marble.webp",
+  sturdy_yellow: "/assets/blocks/sandstone_hard.webp",
+  unbreakable: "/assets/blocks/diamond.webp",
+  surface_dirt: "/assets/blocks/dirt.webp",
+  surface_grass: "/assets/blocks/grass_dirt.webp",
+  destroy: "/assets/blocks/destroy.png"
+};
+
 export class CanvasRenderer implements IRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly images = new Map<string, HTMLImageElement>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -23,6 +39,8 @@ export class CanvasRenderer implements IRenderer {
       throw new Error("Canvas 2D context is unavailable.");
     }
     this.ctx = ctx;
+    this.ctx.imageSmoothingEnabled = false;
+    this.preloadAssets();
   }
 
   render(game: any, ctx: RenderContext): void {
@@ -35,6 +53,7 @@ export class CanvasRenderer implements IRenderer {
     const maxY = minY + visibleRows;
     const now = ctx.nowMs;
 
+    this.ctx.imageSmoothingEnabled = false;
     this.drawBackground();
     this.drawGrid(cameraY);
 
@@ -56,6 +75,7 @@ export class CanvasRenderer implements IRenderer {
           type: member.type,
           hp: member.hp,
           color: member.color,
+          visualId: member.visualId,
           cracked: member.cracked,
           eventId: member.eventId,
           fallState: "FALLING",
@@ -71,6 +91,14 @@ export class CanvasRenderer implements IRenderer {
 
     if (gameOver) {
       this.drawGameOverOverlay();
+    }
+  }
+
+  private preloadAssets(): void {
+    for (const [key, src] of Object.entries(BLOCK_ASSET_SOURCES)) {
+      const image = new Image();
+      image.src = src;
+      this.images.set(key, image);
     }
   }
 
@@ -121,22 +149,23 @@ export class CanvasRenderer implements IRenderer {
       block.fallState === "SHAKING" ? Math.sin(nowMs * 0.08 + x * 5 + y * 3) * 2 : 0;
     const drawX = Math.round(baseX + jitter);
     const drawY = baseY;
-    const color = this.blockColor(block, isFalling);
 
-    ctx.fillStyle = color;
-    ctx.fillRect(drawX + 1, drawY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    const assetKey = this.resolveAssetKey(block);
+    const usedImage = assetKey ? this.drawBlockImage(assetKey, drawX, drawY) : false;
 
-    if (block.type === "STURDY" && block.hp === 1) {
-      ctx.strokeStyle = "#d8e0e8";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(drawX + TILE_SIZE * 0.25, drawY + TILE_SIZE * 0.25);
-      ctx.lineTo(drawX + TILE_SIZE * 0.75, drawY + TILE_SIZE * 0.6);
-      ctx.lineTo(drawX + TILE_SIZE * 0.45, drawY + TILE_SIZE * 0.82);
-      ctx.stroke();
+    if (usedImage) {
+      if (isFalling) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+        ctx.fillRect(drawX + 1, drawY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      }
+      this.drawCrackOverlayIfNeeded(block, drawX, drawY);
+      return;
     }
 
-    if (block.type === "EVENT") {
+    ctx.fillStyle = this.blockColor(block, isFalling);
+    ctx.fillRect(drawX + 1, drawY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+
+    if (block.type === "EVENT" && !block.visualId) {
       ctx.fillStyle = "#fff8bf";
       ctx.beginPath();
       ctx.arc(
@@ -169,16 +198,77 @@ export class CanvasRenderer implements IRenderer {
       ctx.fill();
     }
 
-    if (block.type === "UNBREAKABLE" && block.cracked) {
-      ctx.strokeStyle = "#9fa9b4";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(drawX + TILE_SIZE * 0.2, drawY + TILE_SIZE * 0.2);
-      ctx.lineTo(drawX + TILE_SIZE * 0.5, drawY + TILE_SIZE * 0.5);
-      ctx.lineTo(drawX + TILE_SIZE * 0.78, drawY + TILE_SIZE * 0.32);
-      ctx.moveTo(drawX + TILE_SIZE * 0.42, drawY + TILE_SIZE * 0.58);
-      ctx.lineTo(drawX + TILE_SIZE * 0.62, drawY + TILE_SIZE * 0.82);
-      ctx.stroke();
+    this.drawCrackOverlayIfNeeded(block, drawX, drawY);
+  }
+
+  private drawBlockImage(assetKey: string, drawX: number, drawY: number): boolean {
+    const image = this.images.get(assetKey);
+    if (!image || !image.complete || image.naturalWidth === 0) {
+      return false;
+    }
+
+    this.ctx.imageSmoothingEnabled = false;
+    this.ctx.drawImage(image, drawX + 1, drawY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    return true;
+  }
+
+  private drawCrackOverlayIfNeeded(block: Block, drawX: number, drawY: number): void {
+    const needsOverlay =
+      (block.type === "STURDY" && block.hp === 1) ||
+      (block.type === "UNBREAKABLE" && block.cracked === true);
+
+    if (!needsOverlay) {
+      return;
+    }
+
+    if (this.drawBlockImage("destroy", drawX, drawY)) {
+      return;
+    }
+
+    this.ctx.strokeStyle = "#d8e0e8";
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath();
+    this.ctx.moveTo(drawX + TILE_SIZE * 0.25, drawY + TILE_SIZE * 0.25);
+    this.ctx.lineTo(drawX + TILE_SIZE * 0.75, drawY + TILE_SIZE * 0.6);
+    this.ctx.lineTo(drawX + TILE_SIZE * 0.45, drawY + TILE_SIZE * 0.82);
+    this.ctx.stroke();
+  }
+
+  private resolveAssetKey(block: Block): string | null {
+    if (block.visualId === "SURFACE_GRASS") {
+      return "surface_grass";
+    }
+    if (block.visualId === "SURFACE_DIRT") {
+      return "surface_dirt";
+    }
+
+    if (block.type === "UNBREAKABLE") {
+      return "unbreakable";
+    }
+
+    if (block.type === "BASIC" && block.color) {
+      return `basic_${this.toColorKey(block.color)}`;
+    }
+
+    if (block.type === "STURDY" && block.color) {
+      return `sturdy_${this.toColorKey(block.color)}`;
+    }
+
+    return null;
+  }
+
+  private toColorKey(color: BlockColor): string {
+    switch (color) {
+      case "BLUE":
+        return "blue";
+      case "RED":
+        return "red";
+      case "GREEN":
+        return "green";
+      case "YELLOW":
+        return "yellow";
+      default:
+        return "blue";
     }
   }
 
